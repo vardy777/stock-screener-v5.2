@@ -4,7 +4,13 @@ from datetime import date, datetime, timezone
 
 import pytest
 
-from v5_2.data.evidence import EvidenceArtifactV1, EvidenceStatus, EvidenceType
+from v5_2.data.evidence import (
+    EvidenceArtifactV1,
+    EvidenceStatus,
+    EvidenceType,
+    EvidenceValidityPolicy,
+    EvidenceValidityRuleV1,
+)
 from v5_2.data.source_approval import (
     ApprovalResolutionError,
     ApprovalResolver,
@@ -45,6 +51,14 @@ def make_approval(day: int, supersedes: str | None = None) -> SourceApprovalArti
         required_evidence_types=tuple(EvidenceType),
         rule_set={},
         supersedes_approval_id=supersedes,
+        evidence_validity_policy=EvidenceValidityPolicy(
+            policy_version="validity-v1",
+            rules=tuple(
+                EvidenceValidityRuleV1(kind, None, True, ("evidence-v1",))
+                for kind in EvidenceType
+            ),
+        ),
+        resolution_as_of=at(day),
     )
 
 

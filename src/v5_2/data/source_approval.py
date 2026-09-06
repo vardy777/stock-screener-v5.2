@@ -7,7 +7,13 @@ from datetime import date, datetime
 from enum import Enum
 from typing import Any
 
-from v5_2.data.evidence import EvidenceArtifactV1, EvidenceStatus, EvidenceType
+from v5_2.data.evidence import (
+    EvidenceArtifactV1,
+    EvidenceStatus,
+    EvidenceType,
+    EvidenceValidityPolicy,
+    EvidenceValidityStatus,
+)
 from v5_2.data.identity import canonical_json, content_hash
 
 
@@ -41,6 +47,7 @@ class SourceApprovalArtifactV1:
     evidence_ids: tuple[str, ...]
     evidence_bundle_hash: str
     evaluator_version: str
+    evidence_validity_policy_version: str
     supersedes_approval_id: str | None
     content_hash: str
 
@@ -59,6 +66,8 @@ class SourceApprovalArtifactV1:
         evidence: Sequence[EvidenceArtifactV1],
         required_evidence_types: Sequence[EvidenceType],
         rule_set: Mapping[str, Any],
+        evidence_validity_policy: EvidenceValidityPolicy,
+        resolution_as_of: datetime,
         supersedes_approval_id: str | None = None,
     ) -> SourceApprovalArtifactV1:
         if coverage_end < coverage_start:
@@ -75,9 +84,17 @@ class SourceApprovalArtifactV1:
         selected = [by_type[kind] for kind in required if kind in by_type]
         if any(item.source_version_identity != source_version_identity for item in selected):
             raise ApprovalEvaluationError("evidence source version mismatch")
+        validity = tuple(
+            evidence_validity_policy.evaluate(
+                item, resolution_as_of, source_version_identity
+            )
+            for item in selected
+        )
         if any(item.status is EvidenceStatus.FAIL for item in selected):
             decision = ApprovalDecision.REJECTED
-        elif set(by_type) < required:
+        elif set(by_type) < required or any(
+            result.status is EvidenceValidityStatus.STALE for result in validity
+        ):
             decision = ApprovalDecision.PENDING
         else:
             has_rules = any(value not in (None, False, "", (), [], {}) for value in rule_set.values())
@@ -103,6 +120,7 @@ class SourceApprovalArtifactV1:
             "evidence_ids": evidence_ids,
             "evidence_bundle_hash": bundle_hash,
             "evaluator_version": evaluator_version,
+            "evidence_validity_policy_version": evidence_validity_policy.policy_version,
             "supersedes_approval_id": supersedes_approval_id,
         }
         digest = content_hash(body)
@@ -121,6 +139,7 @@ class SourceApprovalArtifactV1:
             evidence_ids=evidence_ids,
             evidence_bundle_hash=bundle_hash,
             evaluator_version=evaluator_version,
+            evidence_validity_policy_version=evidence_validity_policy.policy_version,
             supersedes_approval_id=supersedes_approval_id,
         )
 

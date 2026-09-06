@@ -5,7 +5,13 @@ from datetime import date, datetime, timezone
 
 import pytest
 
-from v5_2.data.evidence import EvidenceArtifactV1, EvidenceStatus, EvidenceType
+from v5_2.data.evidence import (
+    EvidenceArtifactV1,
+    EvidenceStatus,
+    EvidenceType,
+    EvidenceValidityPolicy,
+    EvidenceValidityRuleV1,
+)
 from v5_2.data.source_approval import (
     ApprovalDecision,
     ApprovalEvaluationError,
@@ -15,6 +21,16 @@ from v5_2.data.source_approval import (
 
 NOW = datetime(2026, 1, 10, tzinfo=timezone.utc)
 REQUIRED = tuple(EvidenceType)
+
+
+def validity_policy() -> EvidenceValidityPolicy:
+    return EvidenceValidityPolicy(
+        policy_version="validity-v1",
+        rules=tuple(
+            EvidenceValidityRuleV1(kind, 30, True, ("evidence-v1",))
+            for kind in EvidenceType
+        ),
+    )
 
 
 def evidence(kind: EvidenceType, status: EvidenceStatus = EvidenceStatus.PASS) -> EvidenceArtifactV1:
@@ -44,6 +60,8 @@ def approval(items: tuple[EvidenceArtifactV1, ...]) -> SourceApprovalArtifactV1:
         evidence=items,
         required_evidence_types=REQUIRED,
         rule_set={"excluded_fields": []},
+        evidence_validity_policy=validity_policy(),
+        resolution_as_of=NOW,
     )
 
 
@@ -88,3 +106,23 @@ def test_approval_and_evidence_are_immutable() -> None:
 def test_callers_cannot_pass_an_approved_boolean() -> None:
     with pytest.raises(TypeError):
         SourceApprovalArtifactV1.evaluate(approved=True)  # type: ignore[call-arg]
+
+
+def test_stale_evidence_fails_closed_to_pending() -> None:
+    stale_time = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    stale_coverage = EvidenceArtifactV1.create(
+        evidence_type=EvidenceType.COVERAGE,
+        status=EvidenceStatus.PASS,
+        observed_at=stale_time,
+        verified_at=stale_time,
+        policy_version="evidence-v1",
+        source_version_identity="synthetic-provider-v1",
+        input_artifact_ids=("stale",),
+        valid_until=None,
+        findings=(),
+    )
+    items = tuple(
+        stale_coverage if kind is EvidenceType.COVERAGE else evidence(kind)
+        for kind in REQUIRED
+    )
+    assert approval(items).decision is ApprovalDecision.PENDING
