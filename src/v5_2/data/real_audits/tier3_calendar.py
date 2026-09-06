@@ -22,6 +22,8 @@ class IndependentSourceIdentityV1:
     schema_identity: tuple[str, ...]
     retrieved_at: datetime
     policy_version: str
+    tls_certificate_verified: bool | None
+    hostname_verified: bool | None
     content_hash: str
 
     @classmethod
@@ -30,6 +32,11 @@ class IndependentSourceIdentityV1:
         rationale = values["source_independence_rationale"].lower()
         if "datahub" in identity or "same upstream" in rationale:
             raise ValueError("Tier 3 independent source is not established")
+        is_https = str(values["endpoint_identity"]).lower().startswith("https://")
+        if is_https and not values["tls_certificate_verified"]:
+            raise ValueError("verified TLS certificate is required")
+        if is_https and not values["hostname_verified"]:
+            raise ValueError("verified TLS hostname is required")
         values["coverage_capability"] = MappingProxyType(dict(sorted(values["coverage_capability"].items())))
         values["schema_identity"] = tuple(values["schema_identity"])
         body = {"schema_version": "IndependentSourceIdentityV1", **values}

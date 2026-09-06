@@ -4,12 +4,10 @@ from dataclasses import fields
 from datetime import datetime, timezone
 import json
 from pathlib import Path
-import ssl
 import sys
 import time
 from collections.abc import Callable
 from urllib.parse import urlencode
-from urllib.request import HTTPSHandler, ProxyHandler, Request, build_opener
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -26,6 +24,7 @@ from v5_2.data.real_audits.tier3_calendar import (  # noqa: E402
     IndependentSourceIdentityV1,
     compare_independent_calendar,
 )
+from v5_2.integrations.official_https import VerifiedHttpsTransportV1  # noqa: E402
 
 
 AS_OF = datetime(2026, 9, 6, tzinfo=timezone.utc)
@@ -43,16 +42,11 @@ def _load(name: str):
 
 
 def _fetch_month(month: str) -> dict[str, int]:
-    context = ssl.create_default_context()
-    context.check_hostname = False
-    context.verify_mode = ssl.CERT_NONE
-    opener = build_opener(ProxyHandler({}), HTTPSHandler(context=context))
-    request = Request(
+    raw = VerifiedHttpsTransportV1().get(
         f"{ENDPOINT}?{urlencode({'month': month})}",
         headers={"User-Agent": "Mozilla/5.0", "Referer": "https://www.szse.cn/aboutus/calendar/"},
     )
-    with opener.open(request, timeout=30) as response:
-        payload = json.load(response)
+    payload = json.loads(raw)
     rows = payload.get("data")
     if not isinstance(rows, list):
         raise RuntimeError(f"SZSE calendar provider error for {month}")
@@ -114,6 +108,8 @@ def main() -> int:
         coverage_capability={"start": "2010-01-01", "end": "2025-12-31", "exchanges": ("SZSE",), "domain": "explicit every calendar date by month"},
         schema_identity=("jyrq", "jybz"), retrieved_at=AS_OF,
         policy_version="independent-source-v1",
+        tls_certificate_verified=True,
+        hostname_verified=True,
     )
     requests = IndependentCalendarSampleRequestV1.from_frozen(selected, source)
     months = sorted({request.calendar_date[:7] for request in requests})

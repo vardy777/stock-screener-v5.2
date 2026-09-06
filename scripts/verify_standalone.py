@@ -28,6 +28,7 @@ RESEARCH_FORBIDDEN_PREFIXES = (
 NETWORK_CLIENT_ROOTS = {"requests", "httpx", "urllib", "socket", "tushare"}
 ALLOWED_NETWORK_BOUNDARIES = {
     Path("src/v5_2/integrations/datahub_http.py"),
+    Path("src/v5_2/integrations/official_https.py"),
 }
 
 

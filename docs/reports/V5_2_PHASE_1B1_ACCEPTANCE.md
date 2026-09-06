@@ -267,6 +267,146 @@ COMMAND: git diff --check
 RESULT: exit 0; no whitespace errors
 ```
 
+## Final superseding acceptance — TLS and exception-governance closure
+
+This is the chronologically latest and authoritative result. It supersedes every earlier pending/rejected matrix in this append-only report; detailed IDs, rationale, and the complete command record are in “TLS revalidation and exceptional-security governance — superseding result” above.
+
+```text
+SZSE OFFICIAL TLS REVALIDATION = PASS
+
+CALENDAR COMPOSITE:
+TOTAL = 256
+MATCH = 256
+MISMATCH = 0
+UNRESOLVED = 0
+PROVIDER_ERROR = 0
+
+TRADE CALENDAR APPROVAL = APPROVED_WITH_RULES
+
+SECURITY MASTER EXCEPTION POLICY = PASS
+EXCEPTION BUDGET = PASS
+SYSTEMATIC DEFECT AUDIT = PASS
+
+SECURITY MASTER EXCEPTIONS = 4
+SECURITY MASTER QUARANTINED = 1
+
+SECURITY MASTER APPROVAL = APPROVED_WITH_RULES
+
+DAILY BAR ENTRY UNLOCKED = YES
+DAILY BAR ACQUISITION = NOT STARTED
+
+PHASE 1B-1 = FAIL
+READY FOR PHASE 1B-2 = NO
+HISTORICAL PIT DATA = FAIL
+READY FOR LABEL ENGINE = NO
+```
+
+```text
+FOCUSED TESTS = 33 passed in 0.11s
+FULL SUITE = 219 passed in 1.11s
+STANDALONE VERIFIER = PASS
+CLEAN-ROOM TESTS = 219 passed in 1.57s
+BUILD / WHEEL INSTALL / WHEEL SMOKE = PASS
+CREDENTIAL / SENTINEL FINDINGS = 0
+.env = IGNORED AND UNTRACKED
+GIT DIFF CHECK = PASS
+```
+
+## TLS revalidation and exceptional-security governance — superseding result
+
+This section supersedes the prior upstream result while preserving every prior artifact. The original SZSE source, composite, V2 adoption, and approval remain immutable, but are now covered by transport-trust artifact `2e5a273b0d2a68268fba93a79403402038306eaa9f4bd5daadfed2eae66c2937` with `TLS_VERIFICATION=DISABLED` and `EVIDENCE_TRUST=INVALID_FOR_FINAL_APPROVAL`. Approval `08933ef18a3532078ade97f6f5f574216e68f04225a95d7c7838bed5ad9b840d` is immutably revoked by `9591e05cc5fae5a059a6183f791f20ca4261ba8fb9b50619439fe1aef625037b`; it is not inherited by the secure evaluation.
+
+### Secure exact-sample calendar replay
+
+```text
+SZSE OFFICIAL TLS REVALIDATION = PASS
+TLS CERTIFICATE VERIFIED = true
+HOSTNAME VERIFIED = true
+HTTPS TO HTTP DOWNGRADE = FORBIDDEN
+SECURE SOURCE ID = b23194c57ee1004105413da7d9a09a141d5cffed3d8797739d4522ac25e2ff24
+EXACT PRIOR SZSE SAMPLE IDS = 128 / 128
+SECURE COMPOSITE ID = 19e54246af0355173a961cc9d91f6842e4094e2732bc650eab47c25734d5bece
+SECURE V2 ADOPTION ID = 0275632a8fb4d6e2de5990b68168f1da2d6244190dbc1e628e8693e82e6d13e6
+
+CALENDAR COMPOSITE:
+TOTAL = 256
+MATCH = 256
+MISMATCH = 0
+UNRESOLVED = 0
+PROVIDER_ERROR = 0
+
+TRADE CALENDAR APPROVAL = APPROVED_WITH_RULES
+TRADE CALENDAR APPROVAL ID = 1581b4d367dba1256247ddd13e09b53d0f95b5b1deeb40af9e6ed4a36606353b
+```
+
+### Exceptional-security re-evaluation
+
+The exception budget was frozen independently of the observed four records: absolute ceiling 10, ratio ceiling 0.1%, explicit field-scoped coverage/session impact ceiling 0.1%, no unknown intervals, and no systematic semantic cluster. Three historical SZSE board observations are resolved by their 1993/1996/1997 listing dates and the official SZSE market chronology (main board existed from 1990; SME board began in 2004; ChiNext began in 2009). `600747.SH` remains an active field-scoped quarantine because SSE official sources disagree on the exact `delisting_date` semantic. Research requiring that field receives explicit `UniverseExclusionEvidenceV1`; no board or date is defaulted and no exclusion is silent.
+
+```text
+SECURITY MASTER EXCEPTION POLICY = PASS
+EXCEPTION POLICY ID = d4d6cff9b8a51405eaeffb0ff9dca2189c589aac825ccb2d9cfd9db4e39fb2a2
+EXCEPTION BUDGET = PASS
+EXCEPTION BUDGET ID = 4bdbccfcf03cb7584860a54d5c3fdf2356045bbd6710fb4949dde80741b1350c
+EXCEPTION SET HASH = a241e5adc5b66691c37c14ab5ef0c7456d8d46be6868ccf0b6cbeee6586a086f
+SYSTEMATIC DEFECT AUDIT = PASS
+PATTERN AUDIT ID = 592582f0378a14181e86a1e0f88b55bc5d1942b155f8e0c305286c6d4df38c64
+
+SECURITY MASTER EXCEPTIONS = 4
+SECURITY MASTER QUARANTINED = 1
+RESOLVED EXCEPTIONS = 3
+ACTIVE FIELD-SCOPED QUARANTINE = 600747.SH / delisting_date
+
+SECURITY MASTER APPROVAL = APPROVED_WITH_RULES
+SECURITY MASTER APPROVAL ID = f208c17accba6b669359f476b2fdf3a1bc9ec6856e7fa1831ccdd1c42b80d8cf
+```
+
+### Combined gate and daily-bar planning artifacts
+
+```text
+COMBINED UPSTREAM GATE = a155e05358bb863bc5788e8c4f93e397ad4f6ee8430dc4a36b03f596df094e13
+DAILY BAR ENTRY UNLOCKED = YES
+DETERMINISTIC DAILY BAR UNIVERSE = 2456669d1158c8efec6e3204082ce67ca87646236120316307822f9e0f19ad01
+DAILY BAR REQUEST INVENTORY = 9b1d034f00ab0d637bc56ab120ffcf725f226f21c09d27c3b85e36a4f644a6ce
+ADJUSTMENT = UNADJUSTED_RAW
+VOLUME UNIT AUDIT = REQUIRED_BEFORE_APPROVAL
+AMOUNT UNIT AUDIT = REQUIRED_BEFORE_APPROVAL
+DAILY BAR ACQUISITION = NOT STARTED
+
+PHASE 1B-1 = FAIL
+READY FOR PHASE 1B-2 = NO
+HISTORICAL PIT DATA = FAIL
+READY FOR LABEL ENGINE = NO
+```
+
+### Complete verification record for this superseding result
+
+```text
+COMMAND: .\.venv\Scripts\python.exe scripts\acquire_szse_calendar_audit.py
+RESULT: secure default/system CA acquisition succeeded; exact_szse_unresolved=128; total=256; match=256; mismatch=0; unresolved=0; provider_error=0; V2=ADOPTED
+
+COMMAND: .\.venv\Scripts\python.exe scripts\evaluate_phase_1b1_upstream.py (executed twice)
+RESULT: byte-identical console result and identical content IDs; trade_calendar=APPROVED_WITH_RULES; security_master=APPROVED_WITH_RULES; exceptions=4; quarantined=1; exception_budget=PASS; systematic_defect=PASS; daily_bar unlocked=YES; acquisition=NOT_STARTED
+
+COMMAND: .\.venv\Scripts\python.exe -m pytest tests\real_audits\test_verified_https.py tests\real_audits\test_exception_governance.py tests\real_audits\test_daily_bar_inventory.py tests\real_audits\test_composite_calendar.py tests\real_audits\test_security_master_governance.py tests\data\test_source_approval.py -q
+RESULT: 33 passed in 0.11s
+
+COMMAND: .\.venv\Scripts\python.exe -m pytest -q
+RESULT: 219 passed in 1.09s
+
+COMMAND: .\.venv\Scripts\python.exe scripts\verify_standalone.py
+RESULT: forbidden imports=0; forbidden active paths/dependencies=0; prohibited repository inventory=0; phase 1a architecture boundary violations=0
+
+COMMAND: .\.venv\Scripts\python.exe scripts\clean_room_acceptance.py
+RESULT: build=true; clean_room_dependencies=true; clean_room_install=true; clean_room_tests=true; wheel_install=true; wheel_smoke=true; zero_dependency_acceptance=true; archive_findings=0; clean-room test output="219 passed in 1.62s"
+
+COMMAND: actual credential and sentinel scan over tracked/runtime artifact areas; git check-ignore .env; git tracked-file check for .env
+RESULT: credential/sentinel findings=0; .env ignored; .env tracked=NO
+
+COMMAND: git diff --check
+RESULT: exit 0; no whitespace errors
+```
+
 ## Current acceptance result
 
 The final, superseding result is the Tier 3 and identity-lineage re-evaluation in this report: calendar and security master remain PENDING; V2 remains DESIGNED_NOT_ADOPTED; daily-bar entry remains locked; Phase 1B-1 remains FAIL.
@@ -595,4 +735,37 @@ RESULT: credential/sentinel findings=0; .env ignored; .env tracked=NO
 
 COMMAND: git diff --check
 RESULT: exit 0; no whitespace errors
+```
+
+## Final superseding matrix (latest append)
+
+The TLS revalidation and exception-governance result is authoritative over all preceding historical sections.
+
+```text
+SZSE OFFICIAL TLS REVALIDATION = PASS
+CALENDAR COMPOSITE: TOTAL=256 MATCH=256 MISMATCH=0 UNRESOLVED=0 PROVIDER_ERROR=0
+TRADE CALENDAR APPROVAL = APPROVED_WITH_RULES
+SECURITY MASTER EXCEPTION POLICY = PASS
+EXCEPTION BUDGET = PASS
+SYSTEMATIC DEFECT AUDIT = PASS
+SECURITY MASTER EXCEPTIONS = 4
+SECURITY MASTER QUARANTINED = 1
+SECURITY MASTER APPROVAL = APPROVED_WITH_RULES
+DAILY BAR ENTRY UNLOCKED = YES
+DAILY BAR ACQUISITION = NOT STARTED
+PHASE 1B-1 = FAIL
+READY FOR PHASE 1B-2 = NO
+HISTORICAL PIT DATA = FAIL
+READY FOR LABEL ENGINE = NO
+```
+
+```text
+FOCUSED TESTS = 33 passed in 0.11s
+FULL SUITE = 219 passed in 1.05s
+STANDALONE VERIFIER = PASS
+CLEAN-ROOM TESTS = 219 passed in 1.54s
+BUILD / WHEEL INSTALL / WHEEL SMOKE = PASS
+CREDENTIAL / SENTINEL FINDINGS = 0
+.env = IGNORED AND UNTRACKED
+GIT DIFF CHECK = PASS
 ```

@@ -36,6 +36,7 @@ def main() -> int:
         coverage_capability={"start": "1990-01-01", "end": "current", "exchanges": ("SSE",)},
         schema_identity=("calendar_date", "is_trading_day"), retrieved_at=AS_OF,
         policy_version="independent-source-v1",
+        tls_certificate_verified=None, hostname_verified=None,
     )
     login = bs.login()
     if login.error_code != "0":

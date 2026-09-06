@@ -33,6 +33,8 @@ def _source(name: str, exchange: str) -> IndependentSourceIdentityV1:
         schema_identity=("calendar_date", "is_open"),
         retrieved_at=NOW,
         policy_version="independent-source-v1",
+        tls_certificate_verified=True,
+        hostname_verified=True,
     )
 
 

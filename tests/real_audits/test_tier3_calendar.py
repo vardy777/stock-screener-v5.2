@@ -23,7 +23,8 @@ def source(coverage=("SSE",)):
         source_independence_rationale="separate provider, protocol and distribution",
         coverage_capability={"start": "1990-01-01", "exchanges": coverage},
         schema_identity=("calendar_date", "is_trading_day"), retrieved_at=NOW,
-        policy_version="independent-source-v1",
+        policy_version="independent-source-v1", tls_certificate_verified=True,
+        hostname_verified=True,
     )
 
 
@@ -34,7 +35,22 @@ def test_tier3_source_must_be_independent_from_datahub() -> None:
             dataset_kind="trade_calendar", endpoint_identity="trade-cal",
             source_independence_rationale="same upstream", coverage_capability={"exchanges": ("SSE",)},
             schema_identity=("calendar_date",), retrieved_at=NOW, policy_version="v1",
+            tls_certificate_verified=True, hostname_verified=True,
         )
+
+
+def test_official_https_source_identity_requires_verified_tls_and_hostname() -> None:
+    values = dict(
+        source_name="SZSE official", provider_identity="www.szse.cn",
+        dataset_kind="trade_calendar", endpoint_identity="https://www.szse.cn/api",
+        source_independence_rationale="direct exchange endpoint unrelated to current provider",
+        coverage_capability={"exchanges": ("SZSE",)}, schema_identity=("date",),
+        retrieved_at=NOW, policy_version="v1",
+    )
+    with pytest.raises(ValueError, match="TLS"):
+        IndependentSourceIdentityV1.create(**values, tls_certificate_verified=False, hostname_verified=True)
+    with pytest.raises(ValueError, match="hostname"):
+        IndependentSourceIdentityV1.create(**values, tls_certificate_verified=True, hostname_verified=False)
 
 
 def test_request_inventory_reuses_exact_frozen_sample_ids() -> None:

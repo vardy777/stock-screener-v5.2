@@ -5,10 +5,8 @@ from datetime import datetime, timezone
 from io import BytesIO
 import json
 from pathlib import Path
-import ssl
 import sys
 from urllib.parse import urlencode
-from urllib.request import HTTPSHandler, ProxyHandler, Request, build_opener
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -22,6 +20,7 @@ from v5_2.data.raw_artifacts import RawArtifactStore  # noqa: E402
 from v5_2.data.real_audits.security_master_governance import SecurityMasterOfficialSampleInventoryV1, select_frozen_security_samples  # noqa: E402
 from v5_2.data.real_audits.security_master_normalization import SecurityMasterNormalizationPolicyV1  # noqa: E402
 from scripts.acquire_szse_calendar_audit import _fetch_with_retry  # noqa: E402
+from v5_2.integrations.official_https import VerifiedHttpsTransportV1  # noqa: E402
 
 
 AS_OF = datetime(2026, 9, 6, tzinfo=timezone.utc)
@@ -34,17 +33,10 @@ def _mapping(item):
     return {field.name: getattr(item, field.name) for field in fields(item)}
 
 
-def _opener():
-    context = ssl.create_default_context()
-    context.check_hostname = False
-    context.verify_mode = ssl.CERT_NONE
-    return build_opener(ProxyHandler({}), HTTPSHandler(context=context))
-
-
 def _get(url: str, *, referer: str) -> bytes:
-    request = Request(url, headers={"User-Agent": "Mozilla/5.0", "Referer": referer})
-    with _opener().open(request, timeout=30) as response:
-        return response.read()
+    return VerifiedHttpsTransportV1().get(
+        url, headers={"User-Agent": "Mozilla/5.0", "Referer": referer}, timeout=30,
+    )
 
 
 def _master_rows():
