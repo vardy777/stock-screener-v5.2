@@ -1,12 +1,15 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from typing import Protocol
 
 from v5_2.data.checkpoints import CheckpointStore, CheckpointV1
 from v5_2.data.raw_artifacts import RawArtifactError, RawArtifactStore, RawPayloadArtifactV1
 from v5_2.providers.contracts import ProviderRequestV1
 from v5_2.providers.credentials import Credential
+from v5_2.providers.rate_limit import RateLimiter
+from v5_2.providers.retry import RetryPolicyV1
 from v5_2.providers.tushare import ProviderPageV1
 
 
@@ -24,6 +27,14 @@ class PageClient(Protocol):
     ) -> ProviderPageV1: ...
 
 
+@dataclass(frozen=True, slots=True)
+class AcquisitionControls:
+    retry_policy: RetryPolicyV1
+    rate_limiter: RateLimiter
+    monotonic_clock: Callable[[], float]
+    sleeper: Callable[[float], None]
+
+
 def acquire_pages(
     *,
     request: ProviderRequestV1,
@@ -32,6 +43,7 @@ def acquire_pages(
     raw_store: RawArtifactStore,
     checkpoint_store: CheckpointStore,
     acquisition_policy_version: str,
+    controls: AcquisitionControls,
     resume: bool = False,
 ) -> tuple[RawPayloadArtifactV1, ...]:
     if resume:
@@ -57,8 +69,12 @@ def acquire_pages(
     produced: list[RawPayloadArtifactV1] = []
     while True:
         expected_identity = {"offset": offset}
-        page = client.fetch_page(
-            request, credential, page_identity=expected_identity
+        controls.rate_limiter.acquire(controls.monotonic_clock, controls.sleeper)
+        page = controls.retry_policy.run(
+            lambda: client.fetch_page(
+                request, credential, page_identity=expected_identity
+            ),
+            controls.sleeper,
         )
         if page.request_id != request.request_id or page.page_identity != expected_identity:
             raise AcquisitionError("provider page identity did not match request")

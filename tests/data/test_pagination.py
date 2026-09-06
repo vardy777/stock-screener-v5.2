@@ -4,12 +4,14 @@ from pathlib import Path
 
 import pytest
 
-from v5_2.data.acquisition import AcquisitionError, acquire_pages
+from v5_2.data.acquisition import AcquisitionControls, AcquisitionError, acquire_pages
 from v5_2.data.checkpoints import CheckpointStore, CheckpointV1
 from v5_2.data.raw_artifacts import RawArtifactStore, RawPayloadArtifactV1
 from v5_2.providers.contracts import ProviderRequestV1
 from v5_2.providers.credentials import load_tushare_credential
 from v5_2.providers.tushare import ProviderPageV1
+from v5_2.providers.rate_limit import RateLimiter
+from v5_2.providers.retry import RetryPolicyV1, TransientProviderError
 
 
 def request() -> ProviderRequestV1:
@@ -21,6 +23,16 @@ def request() -> ProviderRequestV1:
         requested_fields=("id",),
         page_size=2,
         request_policy_version="request-v1",
+    )
+
+
+def controls(sleeps: list[float] | None = None) -> AcquisitionControls:
+    observed = [] if sleeps is None else sleeps
+    return AcquisitionControls(
+        retry_policy=RetryPolicyV1(1, 0.0, 0.0, "retry-v1"),
+        rate_limiter=RateLimiter(min_interval_seconds=0.0),
+        monotonic_clock=lambda: 0.0,
+        sleeper=observed.append,
     )
 
 
@@ -52,6 +64,7 @@ def test_pagination_stops_on_short_page_and_checkpoints_each_page(tmp_path: Path
         raw_store=RawArtifactStore(tmp_path),
         checkpoint_store=CheckpointStore(tmp_path),
         acquisition_policy_version="acquisition-v1",
+        controls=controls(),
     )
     assert client.offsets == [0, 2, 4]
     assert len(artifacts) == 3
@@ -85,6 +98,7 @@ def test_resume_starts_at_checkpoint_next_offset(tmp_path: Path) -> None:
         checkpoint_store=CheckpointStore(tmp_path),
         acquisition_policy_version="acquisition-v1",
         resume=True,
+        controls=controls(),
     )
     assert client.offsets == [2]
 
@@ -108,6 +122,7 @@ def test_resume_rejects_checkpoint_with_missing_raw_artifact(tmp_path: Path) -> 
             checkpoint_store=CheckpointStore(tmp_path),
             acquisition_policy_version="acquisition-v1",
             resume=True,
+            controls=controls(),
         )
 
 
@@ -120,4 +135,37 @@ def test_nonmatching_page_identity_fails_closed(tmp_path: Path) -> None:
             raw_store=RawArtifactStore(tmp_path),
             checkpoint_store=CheckpointStore(tmp_path),
             acquisition_policy_version="acquisition-v1",
+            controls=controls(),
         )
+
+
+def test_transient_page_failure_uses_bounded_retry_controls(tmp_path: Path) -> None:
+    stable = FakeClient([{"id": 1}])
+    attempts = 0
+
+    class FlakyClient:
+        def fetch_page(self, req, credential, *, page_identity):
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                raise TransientProviderError("temporary")
+            return stable.fetch_page(req, credential, page_identity=page_identity)
+
+    sleeps: list[float] = []
+    configured = AcquisitionControls(
+        retry_policy=RetryPolicyV1(2, 1.0, 1.0, "retry-v1"),
+        rate_limiter=RateLimiter(min_interval_seconds=0.0),
+        monotonic_clock=lambda: 0.0,
+        sleeper=sleeps.append,
+    )
+    acquire_pages(
+        request=request(),
+        client=FlakyClient(),
+        credential=load_tushare_credential(env={"TUSHARE_TOKEN": "sentinel"}),
+        raw_store=RawArtifactStore(tmp_path),
+        checkpoint_store=CheckpointStore(tmp_path),
+        acquisition_policy_version="acquisition-v1",
+        controls=configured,
+    )
+    assert attempts == 2
+    assert sleeps == [1.0]
