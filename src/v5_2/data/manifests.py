@@ -1,0 +1,119 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import date, datetime
+
+from v5_2.data.identity import content_hash
+from v5_2.data.source_approval import ApprovalDecision, SourceApprovalArtifactV1
+
+
+class ManifestError(RuntimeError):
+    """An approved immutable dataset manifest cannot be constructed."""
+
+
+@dataclass(frozen=True, slots=True)
+class DatasetManifestV1:
+    dataset_id: str
+    created_at: datetime
+    source_name: str
+    dataset_kind: str
+    approval_id: str
+    approval_content_hash: str
+    approval_resolution_as_of: datetime
+    coverage_start: date
+    coverage_end: date
+    row_count: int
+    symbol_count: int
+    raw_payload_hashes: tuple[str, ...]
+    normalized_content_hashes: tuple[str, ...]
+    fact_content_hashes: tuple[str, ...]
+    normalizer_version: str
+    availability_policy_version: str
+    quality_findings: tuple[str, ...]
+    pit_validation_status: str
+    rule_compliance_status: str
+    pagination_complete: bool
+    manifest_hash: str
+
+    @classmethod
+    def create(
+        cls,
+        *,
+        created_at: datetime,
+        source_name: str,
+        dataset_kind: str,
+        approval: SourceApprovalArtifactV1,
+        approval_resolution_as_of: datetime,
+        coverage_start: date,
+        coverage_end: date,
+        row_count: int,
+        symbol_count: int,
+        raw_payload_hashes: tuple[str, ...],
+        normalized_content_hashes: tuple[str, ...],
+        fact_content_hashes: tuple[str, ...],
+        normalizer_version: str,
+        availability_policy_version: str,
+        quality_findings: tuple[str, ...],
+        pit_validation_status: str,
+        rule_compliance_status: str,
+        pagination_complete: bool,
+    ) -> DatasetManifestV1:
+        approving = {ApprovalDecision.APPROVED, ApprovalDecision.APPROVED_WITH_RULES}
+        if approval.decision not in approving:
+            raise ManifestError("manifest requires an approving artifact")
+        if approval.source_name != source_name or approval.dataset_kind != dataset_kind:
+            raise ManifestError("approval scope does not match dataset")
+        if coverage_end < coverage_start or not (
+            approval.coverage_start <= coverage_start
+            and approval.coverage_end >= coverage_end
+        ):
+            raise ManifestError("dataset coverage is not contained by approval")
+        if pit_validation_status != "PASS":
+            raise ManifestError("PIT validation must PASS")
+        if rule_compliance_status != "PASS":
+            raise ManifestError("approval rule compliance must PASS")
+        if pagination_complete is not True:
+            raise ManifestError("pagination must be complete")
+        if row_count < 0 or symbol_count < 0 or symbol_count > row_count:
+            raise ManifestError("dataset counts are invalid")
+        if not raw_payload_hashes or not normalized_content_hashes or not fact_content_hashes:
+            raise ManifestError("dataset lineage hashes must not be empty")
+        for name, value in (
+            ("created_at", created_at),
+            ("approval_resolution_as_of", approval_resolution_as_of),
+        ):
+            if value.tzinfo is None or value.utcoffset() is None:
+                raise ManifestError(f"{name} must be timezone-aware")
+        body = {
+            "schema_version": "DatasetManifestV1",
+            "created_at": created_at,
+            "source_name": source_name,
+            "dataset_kind": dataset_kind,
+            "approval_id": approval.approval_id,
+            "approval_content_hash": approval.content_hash,
+            "approval_resolution_as_of": approval_resolution_as_of,
+            "coverage_start": coverage_start,
+            "coverage_end": coverage_end,
+            "row_count": row_count,
+            "symbol_count": symbol_count,
+            "raw_payload_hashes": raw_payload_hashes,
+            "normalized_content_hashes": normalized_content_hashes,
+            "fact_content_hashes": fact_content_hashes,
+            "normalizer_version": normalizer_version,
+            "availability_policy_version": availability_policy_version,
+            "quality_findings": tuple(sorted(quality_findings)),
+            "pit_validation_status": pit_validation_status,
+            "rule_compliance_status": rule_compliance_status,
+            "pagination_complete": pagination_complete,
+        }
+        digest = content_hash(body)
+        values = dict(body)
+        values.pop("schema_version")
+        return cls(dataset_id=digest, manifest_hash=digest, **values)  # type: ignore[arg-type]
+
+    def verify_pinned_approval(self, approval: SourceApprovalArtifactV1) -> bool:
+        return (
+            approval.approval_id == self.approval_id
+            and approval.content_hash == self.approval_content_hash
+            and approval.approval_id == approval.content_hash
+        )
