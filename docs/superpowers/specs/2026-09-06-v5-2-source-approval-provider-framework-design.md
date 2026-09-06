@@ -69,6 +69,7 @@ rule_set
 evidence_ids
 evidence_bundle_hash
 evaluator_version
+supersedes_approval_id  # optional
 ```
 
 The evaluator accepts only immutable evidence artifacts produced by registered
@@ -80,8 +81,31 @@ failed, stale, conflicting or tampered evidence produces `PENDING` or
 
 Approval identity is the canonical content hash of the decision payload.
 Changing evidence, rules, coverage, provider version or policy creates a new
-artifact. Old approvals remain readable. Formal import resolves the newest
-applicable non-revoked artifact whose coverage contains every imported row.
+artifact. Old approvals remain readable and are never edited to express a
+revocation or supersession.
+
+Revocation is itself an immutable artifact:
+
+```text
+SourceApprovalRevocationArtifactV1
+  revocation_id
+  approval_id
+  reason
+  effective_at
+  created_at
+  evidence_ids
+  policy_version
+  content_hash
+```
+
+The approval resolver requires explicit `source_name`, `dataset_kind`, requested
+coverage and `resolution_as_of`. It deterministically returns one exact
+`approval_id`, or fails closed if no unique applicable approval exists. It
+applies only revocations effective on or before `resolution_as_of` and follows
+explicit `supersedes_approval_id` links; creation order or repository iteration
+order never decides the result. A later approval or revocation cannot change the
+historical meaning of an already published manifest because the manifest pins
+the resolved `approval_id` and its resolution context.
 
 ## Package boundaries
 
@@ -135,12 +159,18 @@ provider cache directories. A tracked `.env.example` may contain only
 ## Provider and acquisition contracts
 
 `ProviderRequestV1` contains `source_name`, `dataset_kind`, `endpoint`,
-canonical non-secret parameters, requested fields, page size and request time.
-Its deterministic `request_id` excludes credentials.
+canonical non-secret parameters, requested fields, page size and request policy
+version. Its deterministic `request_id` is the canonical hash of exactly those
+fields. Requested fields and parameters have canonical ordering and encoding.
 
-`ProviderPageV1` contains request ID, page index/offset, received time,
-provider response code/message after sanitization, rows and raw content hash.
-No normalizer receives a live client.
+Credentials and all volatile wall-clock or transport observations are forbidden
+from `request_id`, including `requested_at`, `received_at`, retry timestamps,
+acquisition timestamps and transport timing. The same logical historical
+request therefore has the same `request_id` whenever it is executed.
+
+`ProviderPageV1` is the transport result used before persistence. Persistence
+separates provider payload identity from the acquisition observation. No
+normalizer receives a live client.
 
 `HistoricalProviderClient` exposes one method:
 
@@ -164,17 +194,29 @@ messages.
 
 ## Immutable raw cache and checkpoints
 
-The raw zone stores one canonical envelope per provider page:
+The raw zone stores one canonical provider payload artifact per provider page:
 
 ```text
-raw/<source>/<dataset_kind>/<request_id>/<page_index>/<content_hash>.json
+raw/<source>/<dataset_kind>/<request_id>/<page_identity>/<payload_hash>.json
 ```
 
-The envelope contains token-free request identity, acquisition timestamps,
-provider response metadata, rows and payload hash. Identical re-acquisition is
-idempotent. A different payload for the same immutable artifact path is a
-collision and fails closed; legitimate provider revision is stored under a new
-content hash and produces revision evidence.
+`RawPayloadArtifactV1` contains request ID, canonical page identity, canonical
+provider payload, semantic provider metadata and `payload_hash`. Semantic
+metadata may affect interpretation of the payload but excludes acquisition time,
+attempt counts and transport timing. `payload_hash` is the canonical content
+hash of logical request/page identity, canonical provider payload and semantic
+provider metadata.
+
+`AcquisitionReceiptV1` separately contains `payload_hash`, `acquired_at`,
+attempt/transport metadata and `receipt_hash`. Receipt identity may change for a
+later acquisition, but it cannot change payload identity.
+
+The same logical request/page plus the same canonical provider payload always
+produces the same `payload_hash`, regardless of acquisition time. It is an
+idempotent reacquisition, not a provider revision. The same logical request/page
+with a different canonical provider payload produces a new `payload_hash` and a
+revision observation. A different payload written to an already-addressed
+immutable path is a collision and fails closed.
 
 Checkpoints contain the ordered raw artifact IDs already accepted, next offset,
 policy versions and a checkpoint content hash. Resume first revalidates every
@@ -228,7 +270,28 @@ time itself cannot masquerade as historical availability.
 ## Validation evidence
 
 Every audit emits an immutable evidence artifact with input IDs, code/policy
-version, sample selection, counts, findings and content hash:
+version, sample selection, counts, findings and content hash. Its machine-readable
+validity fields include at least:
+
+```text
+evidence_type
+observed_at
+verified_at
+policy_version
+source_version_identity
+input_artifact_ids
+valid_until  # optional
+```
+
+Staleness is evaluated by a versioned `EvidenceValidityPolicy`, not an arbitrary
+global age threshold. The policy defines deterministic rules separately for
+historical immutable coverage evidence, provider/API behavior evidence,
+PIT/time-semantics evidence, license/usage evidence and cross-source evidence.
+Rules may use `valid_until`, provider/source-version changes, policy-version
+compatibility, input replacement or evidence-type-specific review intervals.
+Missing, failed, stale, conflicting or tampered evidence always fails closed.
+
+Registered evidence categories are:
 
 - coverage: requested dates/symbols versus present, duplicate and missing rows;
 - PIT/time fields: endpoint documentation plus sampled official/event records;
@@ -245,7 +308,8 @@ or support `HISTORICAL PIT DATA = PASS`.
 ## DatasetManifest
 
 `DatasetManifestV1` contains `dataset_id`, schema version, creation time,
-dataset-kind approvals, exact coverage, row/symbol counts, date bounds, ordered
+the exact pinned `approval_id` and approval `resolution_as_of`, exact coverage,
+row/symbol counts, date bounds, ordered
 raw/normalized/fact content hashes, normalizer and availability-policy versions,
 quality findings and PIT validation status.
 
@@ -260,6 +324,11 @@ IDs, pagination termination and loop detection, retry classification/backoff,
 rate limiting, checkpoint resume/tamper rejection, immutable raw collisions,
 row-order-independent normalization, conservative date-only availability,
 evidence completeness, dataset-kind isolation and manifest fail-closed rules.
+It also covers deterministic request identity across execution times; identical
+reacquisition, changed-payload revision and acquisition-time-only changes;
+approval supersession, immutable revocation, `resolution_as_of` and old-manifest
+reproducibility; and deterministic stale/non-stale outcomes for each registered
+evidence validity rule.
 
 Clean-room acceptance installs the package without a token and runs all tests.
 Secret scans use a sentinel and verify stdout/stderr, exceptions, raw artifacts,
