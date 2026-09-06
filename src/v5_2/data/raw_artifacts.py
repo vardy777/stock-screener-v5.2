@@ -148,3 +148,21 @@ class RawArtifactStore:
         if claimed_hash != artifact.payload_hash:
             raise RawArtifactError("payload hash mismatch")
         return artifact
+
+    def require_payload_hashes(
+        self,
+        source_name: str,
+        dataset_kind: str,
+        request_id: str,
+        payload_hashes: tuple[str, ...],
+    ) -> None:
+        request_root = (
+            self.root / "raw" / source_name / dataset_kind / request_id[:16]
+        )
+        for payload_hash in payload_hashes:
+            matches = tuple(request_root.rglob(f"{payload_hash}.json"))
+            if len(matches) != 1:
+                raise RawArtifactError("missing or ambiguous raw artifact")
+            artifact = self.read_payload(matches[0])
+            if artifact.request_id != request_id or artifact.payload_hash != payload_hash:
+                raise RawArtifactError("raw artifact identity mismatch")
