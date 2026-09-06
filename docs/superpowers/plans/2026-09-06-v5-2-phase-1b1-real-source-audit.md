@@ -4,9 +4,9 @@
 
 **Goal:** Audit and, only where immutable evidence passes frozen policy, publish independently approved Tushare trade-calendar, security-master and raw daily-bar facts.
 
-**Architecture:** Three content-addressed audit policies are frozen before acquisition. Real provider responses pass through the Phase 1A credential, raw, receipt, normalization, evidence, approval and manifest boundaries; official SSE/SZSE observations provide deterministic cross-source evidence and no provider receives global approval.
+**Architecture:** Three content-addressed audit policies are frozen before acquisition. Real DataHub Tushare-compatible responses pass through the Phase 1A credential, raw, receipt, normalization, evidence, approval and manifest boundaries; official SSE/SZSE observations provide deterministic cross-source evidence and no provider receives global approval.
 
-**Tech Stack:** Python 3.11+, pytest, standard library, injected HTTPS transport, Tushare Pro API, immutable JSON artifacts.
+**Tech Stack:** Python 3.11+, pytest, standard library, isolated injected HTTP transport, DataHub Tushare-compatible API, immutable JSON artifacts.
 
 **Spec:** User-approved Phase 1B-1 instruction attached on 2026-09-06 and `docs/superpowers/specs/2026-09-06-v5-2-source-approval-provider-framework-design.md`.
 
@@ -15,8 +15,9 @@
 - Only `trade_calendar`, `security_master` and unadjusted `daily_bar` are in scope.
 - No Phase 1B-2 datasets, feature, label, ranking, ML, backtest, research run or alpha claim.
 - Audit policy is committed before any real evidence is generated and cannot be loosened after observing results.
-- Real credentials come only from `TUSHARE_TOKEN` or repository-local untracked `.env` and never appear in output or artifacts.
-- Missing local credential stops all real-network work with `REAL SOURCE AUDIT BLOCKED = MISSING LOCAL TUSHARE_TOKEN`.
+- Real credentials come only from `DATAHUB_API_KEY` or repository-local untracked `.env` and never appear in output or artifacts.
+- The verified DataHub route is plaintext HTTP; evidence must record this and approval cannot conceal or mislabel the transport.
+- Missing local credential stops all real-network work with `REAL SOURCE AUDIT BLOCKED = MISSING_LOCAL_DATAHUB_API_KEY`.
 - Every dataset decision is independent and derived by the Phase 1A evaluator.
 - `HISTORICAL PIT DATA = FAIL` and `READY FOR LABEL ENGINE = NO` remain frozen.
 
@@ -42,7 +43,7 @@
 - [ ] Write failing tests proving environment/local `.env` discovery, missing-token blocking, repository-bound path enforcement and output redaction.
 - [ ] Implement preflight using the Phase 1A credential loader; do not make a network call during preflight.
 - [ ] If credential is missing, stop Tasks 3-7 and report the exact mandated blocker.
-- [ ] If credential exists, run a sanitized allowlisted Tushare probe and commit `feat: add phase 1b1 credential preflight`.
+- [ ] If credential exists, run a sanitized allowlisted DataHub probe and commit `feat: add phase 1b1 credential preflight`.
 
 ### Task 3: Trade-calendar real audit
 
