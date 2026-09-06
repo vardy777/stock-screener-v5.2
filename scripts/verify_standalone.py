@@ -16,6 +16,15 @@ ALLOWED_CREDENTIAL_CONTRACTS = {
     Path("src/v5_2/providers/credentials.py"),
     Path("tests/providers/test_credentials.py"),
 }
+RESEARCH_PACKAGES = {"features", "labels", "ranking", "strategies", "evaluation"}
+RESEARCH_FORBIDDEN_PREFIXES = (
+    "v5_2.providers",
+    "v5_2.data.raw_artifacts",
+    "v5_2.data.checkpoints",
+    "v5_2.data.acquisition",
+    "v5_2.data.normalization",
+)
+NETWORK_CLIENT_ROOTS = {"requests", "httpx", "urllib", "socket", "tushare"}
 
 
 def _files(root: Path, areas: tuple[str, ...]):
@@ -45,6 +54,54 @@ def scan_imports(root: Path) -> list[str]:
                 roots.add(node.module.split(".", 1)[0])
         for module in sorted(roots & FORBIDDEN_MODULES):
             findings.append(f"{path.relative_to(root)}: forbidden import {module}")
+    return findings
+
+
+def _imported_modules(path: Path) -> set[str]:
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    modules: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            modules.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            modules.add(node.module)
+    return modules
+
+
+def scan_phase1a_boundaries(root: Path) -> list[str]:
+    findings: list[str] = []
+    package = root / "src" / "v5_2"
+    for research_name in sorted(RESEARCH_PACKAGES):
+        research = package / research_name
+        if not research.is_dir():
+            continue
+        for path in research.rglob("*.py"):
+            for module in sorted(_imported_modules(path)):
+                if any(
+                    module == prefix or module.startswith(prefix + ".")
+                    for prefix in RESEARCH_FORBIDDEN_PREFIXES
+                ):
+                    findings.append(
+                        f"{path.relative_to(root)}: research boundary import {module}"
+                    )
+    controlled = list((package / "providers").rglob("*.py")) if (package / "providers").is_dir() else []
+    acquisition = package / "data" / "acquisition.py"
+    if acquisition.is_file():
+        controlled.append(acquisition)
+    for path in controlled:
+        for module in sorted(_imported_modules(path)):
+            if module.split(".", 1)[0] in NETWORK_CLIENT_ROOTS:
+                findings.append(
+                    f"{path.relative_to(root)}: direct network client import {module}"
+                )
+    normalization = package / "data" / "normalization.py"
+    if normalization.is_file():
+        for module in sorted(_imported_modules(normalization)):
+            root_module = module.split(".", 1)[0]
+            if root_module in {"os", "pathlib", "socket", "requests", "httpx", "urllib"} or module.startswith("v5_2.providers"):
+                findings.append(
+                    f"{normalization.relative_to(root)}: pure normalization import {module}"
+                )
     return findings
 
 
@@ -83,7 +140,12 @@ def scan_inventory(root: Path) -> list[str]:
 
 def verify(root: Path) -> list[str]:
     root = root.resolve()
-    return scan_imports(root) + scan_active_paths(root) + scan_inventory(root)
+    return (
+        scan_imports(root)
+        + scan_active_paths(root)
+        + scan_inventory(root)
+        + scan_phase1a_boundaries(root)
+    )
 
 
 def main() -> int:
@@ -96,6 +158,7 @@ def main() -> int:
     print("PASS forbidden imports: 0")
     print("PASS forbidden active paths/dependencies: 0")
     print("PASS prohibited repository inventory: 0")
+    print("PASS phase 1a architecture boundary violations: 0")
     return 0
 
 
