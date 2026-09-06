@@ -160,3 +160,109 @@ exit 0; no whitespace errors
 ```
 
 Final full-suite and environmental command timings may vary across runs. The exit commit records the last fresh results below before push.
+
+## Upstream blocker re-evaluation — final status at this revision
+
+This is the latest section and supersedes the prior re-validation status while preserving it as historical evidence.
+
+### Trade-calendar unresolved inventory
+
+```text
+inventory schema = TradeCalendarUnresolvedSampleInventoryV1
+inventory id = 0242b7d10a358d81f5c1b40a42920ef75c55b1e42f6d1e6ea3a77d85b5e11cd0
+total frozen samples = 256
+verified = 5
+unresolved = 251
+mismatch = 0
+
+SSE: verified=3, unresolved=125
+SZSE: verified=2, unresolved=126
+
+spring_festival_boundary: verified=0, unresolved=64
+national_day_boundary: verified=3, unresolved=61
+weekend_makeup_boundary: verified=2, unresolved=62
+cross_year_boundary: verified=0, unresolved=64
+
+2010-2024: 16 unresolved per year
+2025: 5 verified, 11 unresolved
+```
+
+The inventory is generated from the frozen hash-selection seed and records every exact provider observation and official-resolution status. The earlier 78/78 boundary comparison remains valid historical evidence, but only five observations overlap the exact frozen sample inventory. It therefore cannot resolve the other 251 samples.
+
+### Security-master exception disposition
+
+```text
+evidence schema = SecurityMasterNormalizationExceptionEvidenceV1
+evidence id = b3e050a611fa0772473341eedb1ba97fcddc33cf204db27c3cc82126e46e48c6
+normalization policy id = d7a7eedfb3dbcbc18382d5d2b4423b2362858b1c48feea7472fea4e7861b5b7d
+
+input = 5549
+NORMALIZED_ELIGIBLE = 5546
+EXCLUDED_NON_TARGET = 1
+REJECTED_UNRESOLVED = 2
+```
+
+The excluded record is an SSE-listed CDR, supported by the SSE listing announcement. The two unresolved records represent a legacy absorbed-company identity and a current code combined with older historical listing identity. Neither can be converted into a permanent A-share identity rule without effective-dated official evidence. Raw records, classification, reasons and official source identities are retained in the ignored immutable evidence chain.
+
+### Latest decisions
+
+```text
+TRADE CALENDAR UNRESOLVED SAMPLES = 251
+TRADE CALENDAR FUNCTIONAL EQUIVALENCE = FAIL
+TRADE CALENDAR APPROVAL = PENDING
+
+SECURITY MASTER INPUT ROWS = 5549
+SECURITY MASTER NORMALIZED ELIGIBLE = 5546
+SECURITY MASTER EXCLUDED NON-TARGET = 1
+SECURITY MASTER UNRESOLVED = 2
+SECURITY MASTER FUNCTIONAL EQUIVALENCE = FAIL
+SECURITY MASTER APPROVAL = PENDING
+
+DAILY BAR ENTRY UNLOCKED = NO
+DAILY BAR ACQUISITION = NOT STARTED
+
+PHASE 1B-1 = FAIL
+READY FOR PHASE 1B-2 = NO
+HISTORICAL PIT DATA = FAIL
+READY FOR LABEL ENGINE = NO
+```
+
+### Latest content-addressed approval evaluation
+
+```text
+trade_calendar equivalence = 578ff31e85d21f1864c5a01c0f4bf084749e0f565efdf73cfd6c9d2d550ebbb2
+trade_calendar approval = 97f37b1b5983ee14728de550b9b649a7a86a0e550570b71c969d44b26279dc23 (PENDING)
+
+security_master equivalence = 6b1fd47c72f067fbcfc1427458fad935c176322509d3ecab3c0d48d5b3c7b997
+security_master approval = d2d8fbdf4c57e2d981fd144a0879fd848939512ce9e2725edfe8d340d89e10b5 (PENDING)
+
+daily_bar equivalence = 5767a07de72e79f223e1a26bf81aea597d44074018dd59770e3e17697697125c
+daily_bar approval = 678c9c4df38d53620aab61f233cdadcdfa2283e29fed5dda625a45b7800a8d5a (PENDING)
+```
+
+### Final verification commands and results
+
+```text
+COMMAND: .\.venv\Scripts\python.exe -m pytest tests/real_audits/test_blocker_evidence.py tests/real_audits/test_security_master_normalization.py -q
+RESULT: 15 passed in 0.16s
+
+COMMAND: .\.venv\Scripts\python.exe scripts/resolve_phase_1b1_blockers.py
+RESULT: calendar total=256 verified=5 unresolved=251 mismatch=0; master input=5549 eligible=5546 excluded=1 unresolved=2
+
+COMMAND: .\.venv\Scripts\python.exe -m pytest -q
+RESULT: 180 passed in 0.77s
+```
+
+```text
+COMMAND: .\.venv\Scripts\python.exe scripts/verify_standalone.py
+RESULT: forbidden imports=0; forbidden active paths/dependencies=0; prohibited repository inventory=0; phase 1a architecture boundary violations=0
+
+COMMAND: .\.venv\Scripts\python.exe scripts/clean_room_acceptance.py
+RESULT: build=true; clean_room_dependencies=true; clean_room_install=true; clean_room_tests=true; wheel_install=true; wheel_smoke=true; zero_dependency_acceptance=true; clean-room test output="180 passed in 1.02s"
+
+COMMAND: actual credential and sentinel scan over tracked/runtime artifact areas
+RESULT: actual credential confined to ignored .env; credential/sentinel artifact findings=0
+
+COMMAND: git diff --check
+RESULT: exit 0; no whitespace errors
+```

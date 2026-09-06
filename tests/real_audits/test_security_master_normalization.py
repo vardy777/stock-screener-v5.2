@@ -53,3 +53,17 @@ def test_policy_is_versioned_and_content_addressed() -> None:
     assert first.policy_id == first.content_hash == second.policy_id
     with pytest.raises(TypeError):
         first.board_mapping["anything"] = "SH_MAIN"  # type: ignore[index]
+
+
+def test_officially_supported_cdr_prefix_is_explicitly_non_target() -> None:
+    row = {"ts_code": "689009.SH", "symbol": "689009", "name": "CDR", "market": "科创板", "exchange": "SSE", "list_status": "L", "list_date": "20201029", "delist_date": None}
+    assert policy().disposition(row) == "EXCLUDED_NON_TARGET"
+    with pytest.raises(SecurityMasterNormalizationError, match="non-target"):
+        policy().normalize(row)
+
+
+def test_legacy_or_reassigned_identity_remains_unresolved() -> None:
+    legacy = {"ts_code": "T600018.SH", "symbol": "T600018", "name": "legacy", "market": None, "exchange": "SSE", "list_status": "D", "list_date": "20000719", "delist_date": "20061020"}
+    reassigned = {"ts_code": "302132.SZ", "symbol": "302132", "name": "reassigned", "market": "创业板", "exchange": "SZSE", "list_status": "L", "list_date": "20100827", "delist_date": None}
+    assert policy().disposition(legacy) == "REJECTED_UNRESOLVED"
+    assert policy().disposition(reassigned) == "REJECTED_UNRESOLVED"

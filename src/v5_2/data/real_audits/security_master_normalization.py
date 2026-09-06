@@ -19,6 +19,8 @@ class SecurityMasterNormalizationPolicyV1:
     board_mapping: Mapping[str, str]
     allowed_statuses: tuple[str, ...]
     a_share_prefixes: Mapping[str, tuple[str, ...]]
+    explicit_non_target_prefixes: Mapping[str, tuple[str, ...]]
+    unresolved_prefixes: Mapping[str, tuple[str, ...]]
     content_hash: str
 
     @classmethod
@@ -34,12 +36,16 @@ class SecurityMasterNormalizationPolicyV1:
             "SSE": ("600", "601", "603", "605", "688"),
             "SZSE": ("000", "001", "002", "003", "300", "301"),
         })
+        non_target = MappingProxyType({"SSE": ("689",), "SZSE": ()})
+        unresolved = MappingProxyType({"SSE": ("T",), "SZSE": ("302",)})
         body = {
             "schema_version": "SecurityMasterNormalizationPolicyV1",
             "policy_version": "security-master-normalization-v1",
             "board_mapping": board_mapping,
             "allowed_statuses": ("D", "L", "P"),
             "a_share_prefixes": prefixes,
+            "explicit_non_target_prefixes": non_target,
+            "unresolved_prefixes": unresolved,
         }
         digest = content_hash(body)
         return cls(
@@ -49,7 +55,23 @@ class SecurityMasterNormalizationPolicyV1:
             board_mapping=board_mapping,
             allowed_statuses=body["allowed_statuses"],
             a_share_prefixes=prefixes,
+            explicit_non_target_prefixes=non_target,
+            unresolved_prefixes=unresolved,
         )
+
+    def disposition(self, row: Mapping[str, Any]) -> str:
+        exchange = str(row.get("exchange"))
+        symbol = row.get("symbol")
+        if not isinstance(symbol, str):
+            return "REJECTED_UNRESOLVED"
+        if symbol.startswith(self.explicit_non_target_prefixes.get(exchange, ())):
+            return "EXCLUDED_NON_TARGET"
+        if symbol.startswith(self.unresolved_prefixes.get(exchange, ())):
+            return "REJECTED_UNRESOLVED"
+        prefixes = self.a_share_prefixes.get(exchange)
+        if prefixes is None or not symbol.startswith(prefixes):
+            return "REJECTED_UNRESOLVED"
+        return "NORMALIZED_ELIGIBLE"
 
     def normalize(self, row: Mapping[str, Any]) -> Mapping[str, Any]:
         exchange = row.get("exchange")
@@ -60,7 +82,12 @@ class SecurityMasterNormalizationPolicyV1:
         board = self.board_mapping.get(f"{exchange}|{market}")
         prefixes = self.a_share_prefixes.get(str(exchange))
         expected_suffix = {"SSE": ".SH", "SZSE": ".SZ"}.get(str(exchange))
+        disposition = self.disposition(row)
+        if disposition == "EXCLUDED_NON_TARGET":
+            raise SecurityMasterNormalizationError("explicit non-target security")
         if (
+            disposition != "NORMALIZED_ELIGIBLE"
+            or
             board is None
             or status not in self.allowed_statuses
             or not isinstance(symbol, str)
