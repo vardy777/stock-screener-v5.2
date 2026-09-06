@@ -121,8 +121,12 @@ def acquire_pages(
                 acquisition_policy_version=acquisition_policy_version,
             )
         )
-        if row_count < request.page_size:
+        if page.has_more is False or (
+            page.has_more is None and row_count < request.page_size
+        ):
             break
+        if page.has_more is True and row_count == 0:
+            raise AcquisitionError("provider reported more pages without rows")
         if next_offset <= offset:
             raise AcquisitionError("pagination did not advance")
         offset = next_offset

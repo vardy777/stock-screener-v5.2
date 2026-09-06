@@ -15,7 +15,7 @@ class Credential:
 
     def __init__(self, value: str) -> None:
         if not value:
-            raise CredentialError("TUSHARE_TOKEN is missing or empty")
+            raise CredentialError("provider credential is missing or empty")
         self.__value = value
 
     def __str__(self) -> str:
@@ -70,4 +70,23 @@ def load_tushare_credential(
         except ValueError as error:
             raise CredentialError("environment file must be repository-local") from error
         token = _read_env_file(candidate).get("TUSHARE_TOKEN", "").strip()
+    return Credential(token)
+
+
+def load_datahub_credential(
+    *,
+    env: Mapping[str, str] | None = None,
+    env_file: Path | None = None,
+    repository_root: Path | None = None,
+) -> Credential:
+    values = os.environ if env is None else env
+    token = values.get("DATAHUB_API_KEY", "").strip()
+    if not token and env_file is not None:
+        root = (repository_root or Path.cwd()).resolve()
+        candidate = env_file.resolve()
+        try:
+            candidate.relative_to(root)
+        except ValueError as error:
+            raise CredentialError("environment file must be repository-local") from error
+        token = _read_env_file(candidate).get("DATAHUB_API_KEY", "").strip()
     return Credential(token)

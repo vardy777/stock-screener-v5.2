@@ -18,11 +18,12 @@ def test_research_import_of_provider_or_raw_boundary_is_detected(tmp_path: Path)
     feature.parent.mkdir(parents=True)
     feature.write_text(
         "from v5_2.providers.credentials import Credential\n"
-        "from v5_2.data.raw_artifacts import RawArtifactStore\n",
+        "from v5_2.data.raw_artifacts import RawArtifactStore\n"
+        "from v5_2.integrations.datahub_http import DataHubHttpTransport\n",
         encoding="utf-8",
     )
     findings = verifier.scan_phase1a_boundaries(tmp_path)
-    assert len(findings) == 2
+    assert len(findings) == 3
     assert all("research boundary" in finding for finding in findings)
 
 
@@ -33,6 +34,13 @@ def test_direct_network_client_import_is_detected(tmp_path: Path) -> None:
     findings = verifier.scan_phase1a_boundaries(tmp_path)
     assert len(findings) == 2
     assert all("network client" in finding for finding in findings)
+
+
+def test_only_allowlisted_integration_may_import_network_client(tmp_path: Path) -> None:
+    allowed = tmp_path / "src" / "v5_2" / "integrations" / "datahub_http.py"
+    allowed.parent.mkdir(parents=True)
+    allowed.write_text("from urllib.request import urlopen\n", encoding="utf-8")
+    assert verifier.scan_phase1a_boundaries(tmp_path) == []
 
 
 def test_normalization_io_import_is_detected(tmp_path: Path) -> None:

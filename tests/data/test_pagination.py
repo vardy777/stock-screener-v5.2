@@ -57,6 +57,33 @@ class FakeClient:
         )
 
 
+def test_explicit_has_more_prevents_extra_terminal_request(tmp_path: Path) -> None:
+    class ExactPageClient(FakeClient):
+        def fetch_page(self, req, credential, *, page_identity):
+            page = super().fetch_page(req, credential, page_identity=page_identity)
+            return ProviderPageV1(
+                request_id=page.request_id,
+                page_identity=page.page_identity,
+                response_code=page.response_code,
+                response_status=page.response_status,
+                rows=page.rows,
+                has_more=False,
+                total_count=2,
+            )
+
+    client = ExactPageClient([{"id": 0}, {"id": 1}])
+    acquire_pages(
+        request=request(),
+        client=client,
+        credential=load_tushare_credential(env={"TUSHARE_TOKEN": "sentinel"}),
+        raw_store=RawArtifactStore(tmp_path),
+        checkpoint_store=CheckpointStore(tmp_path),
+        acquisition_policy_version="acquisition-v1",
+        controls=controls(),
+    )
+    assert client.offsets == [0]
+
+
 def test_pagination_stops_on_short_page_and_checkpoints_each_page(tmp_path: Path) -> None:
     client = FakeClient([{"id": value} for value in range(5)])
     artifacts = acquire_pages(

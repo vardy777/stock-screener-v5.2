@@ -23,8 +23,12 @@ RESEARCH_FORBIDDEN_PREFIXES = (
     "v5_2.data.checkpoints",
     "v5_2.data.acquisition",
     "v5_2.data.normalization",
+    "v5_2.integrations",
 )
 NETWORK_CLIENT_ROOTS = {"requests", "httpx", "urllib", "socket", "tushare"}
+ALLOWED_NETWORK_BOUNDARIES = {
+    Path("src/v5_2/integrations/datahub_http.py"),
+}
 
 
 def _files(root: Path, areas: tuple[str, ...]):
@@ -84,11 +88,13 @@ def scan_phase1a_boundaries(root: Path) -> list[str]:
                     findings.append(
                         f"{path.relative_to(root)}: research boundary import {module}"
                     )
-    controlled = list((package / "providers").rglob("*.py")) if (package / "providers").is_dir() else []
+    controlled = list(package.rglob("*.py"))
     acquisition = package / "data" / "acquisition.py"
     if acquisition.is_file():
         controlled.append(acquisition)
     for path in controlled:
+        if path.relative_to(root) in ALLOWED_NETWORK_BOUNDARIES:
+            continue
         for module in sorted(_imported_modules(path)):
             if module.split(".", 1)[0] in NETWORK_CLIENT_ROOTS:
                 findings.append(

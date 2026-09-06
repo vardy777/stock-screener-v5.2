@@ -20,6 +20,8 @@ class ProviderPageV1:
     response_code: int
     response_status: str
     rows: tuple[Mapping[str, Any], ...]
+    has_more: bool | None = None
+    total_count: int | None = None
 
 
 Transport = Callable[[str, str, dict[str, object]], dict[str, object]]

@@ -4,7 +4,11 @@ from pathlib import Path
 
 import pytest
 
-from v5_2.providers.credentials import CredentialError, load_tushare_credential
+from v5_2.providers.credentials import (
+    CredentialError,
+    load_datahub_credential,
+    load_tushare_credential,
+)
 
 
 SENTINEL = "SENTINEL_TUSHARE_SECRET"
@@ -23,6 +27,24 @@ def test_repository_local_env_can_supply_token(tmp_path: Path) -> None:
     env_file = tmp_path / ".env"
     env_file.write_text(f"TUSHARE_TOKEN={SENTINEL}\n", encoding="utf-8")
     credential = load_tushare_credential(
+        env={}, env_file=env_file, repository_root=tmp_path
+    )
+    assert credential.reveal_for_transport() == SENTINEL
+
+
+def test_datahub_credential_uses_only_its_provider_specific_name(tmp_path: Path) -> None:
+    credential = load_datahub_credential(
+        env={"DATAHUB_API_KEY": SENTINEL, "TUSHARE_TOKEN": "wrong"},
+        repository_root=tmp_path,
+    )
+    assert credential.reveal_for_transport() == SENTINEL
+    assert SENTINEL not in repr(credential)
+
+
+def test_repository_local_env_can_supply_datahub_key(tmp_path: Path) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text(f"DATAHUB_API_KEY={SENTINEL}\n", encoding="utf-8")
+    credential = load_datahub_credential(
         env={}, env_file=env_file, repository_root=tmp_path
     )
     assert credential.reveal_for_transport() == SENTINEL
