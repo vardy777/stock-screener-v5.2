@@ -14,6 +14,10 @@ FORBIDDEN_ROOTS = {
     ".hermes", "g1", "v2", "v4", "v5", "v5_1", "shared_core",
     "V5_1_RC1.zip", "V5_1_RC2.zip",
 }
+ALLOWED_CREDENTIAL_CONTRACTS = {
+    Path("src/v5_2/providers/credentials.py"),
+    Path("tests/providers/test_credentials.py"),
+}
 
 
 def imported_roots(path: Path) -> set[str]:
@@ -64,8 +68,18 @@ def test_repository_inventory_excludes_legacy_projects():
     names = {path.name for path in ROOT.iterdir()}
     assert names.isdisjoint(FORBIDDEN_ROOTS)
     prohibited = re.compile(r"(?i)(pushplus|register.*task|runtime[_ -]?facts|credentials?)")
-    tracked_candidates = [p for p in ROOT.rglob("*") if p.is_file() and ".git" not in p.parts]
-    assert not [p for p in tracked_candidates if prohibited.search(p.name)]
+    ignored_parts = {".git", ".venv", ".pytest_cache", "__pycache__", "build", "dist"}
+    tracked_candidates = [
+        p
+        for p in ROOT.rglob("*")
+        if p.is_file()
+        and not any(part in ignored_parts or part.endswith(".egg-info") for part in p.parts)
+    ]
+    assert not [
+        p
+        for p in tracked_candidates
+        if prohibited.search(p.name) and p.relative_to(ROOT) not in ALLOWED_CREDENTIAL_CONTRACTS
+    ]
 
 
 def test_project_configuration_is_self_contained():

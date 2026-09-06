@@ -44,7 +44,7 @@
 - [ ] Write tests using sentinel `SENTINEL_TUSHARE_SECRET` to prove redacted `str`/`repr`/errors/files, repository-local `.env` enforcement, empty/missing token rejection, endpoint allowlisting and injected transport use.
 - [ ] Run both focused files; expect missing-module failures.
 - [ ] Implement the opaque credential handle, strict dotenv parser, sanitized provider errors and injected callable transport; never implement HTTP.
-- [ ] Run focused and full tests, then scan `git grep -n "SENTINEL_TUSHARE_SECRET" -- ':!tests/**'`; expect no matches.
+- [ ] Run focused and full tests, then scan `git grep -n "SENTINEL_TUSHARE_SECRET" -- src scripts`; expect no matches.
 - [ ] Commit with `git commit -m "feat: enforce provider credential boundary"`.
 
 ### Task 3: Payload artifacts, receipts and revision identity

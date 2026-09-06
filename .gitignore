@@ -7,5 +7,10 @@ dist/
 *.egg-info/
 .coverage
 .env
+.env.*
+credentials*
+secrets*
+!.env.example
+!src/v5_2/providers/credentials.py
 /data/
 *.log

@@ -12,6 +12,10 @@ FORBIDDEN_ROOTS = {
     "V5_1_RC1.zip", "V5_1_RC2.zip",
 }
 IGNORED_PARTS = {".git", ".venv", ".pytest_cache", "__pycache__", "build", "dist"}
+ALLOWED_CREDENTIAL_CONTRACTS = {
+    Path("src/v5_2/providers/credentials.py"),
+    Path("tests/providers/test_credentials.py"),
+}
 
 
 def _files(root: Path, areas: tuple[str, ...]):
@@ -69,8 +73,9 @@ def scan_inventory(root: Path) -> list[str]:
     findings = [f"{name}: forbidden root entry" for name in sorted({p.name for p in root.iterdir()} & FORBIDDEN_ROOTS)]
     prohibited = re.compile(r"(?i)(pushplus|register.*task|runtime[_ -]?facts|credentials?)")
     for path in _files(root, ("src", "tests", "scripts")):
-        if prohibited.search(path.name):
-            findings.append(f"{path.relative_to(root)}: prohibited asset name")
+        relative = path.relative_to(root)
+        if prohibited.search(path.name) and relative not in ALLOWED_CREDENTIAL_CONTRACTS:
+            findings.append(f"{relative}: prohibited asset name")
     if (root / ".gitmodules").exists():
         findings.append(".gitmodules: submodules prohibited")
     return findings
