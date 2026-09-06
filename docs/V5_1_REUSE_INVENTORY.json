@@ -1,0 +1,19 @@
+{
+  "schema_version": "v5.2-standalone-migration-inventory-v1",
+  "runtime_dependency_on_previous_projects": false,
+  "copied_and_owned": [
+    "strict validation and timezone behavior",
+    "TradingCalendar and calendar validation behavior",
+    "canonical hashing and immutable atomic persistence behavior",
+    "A-share quantity rule behavior"
+  ],
+  "excluded": [
+    "all earlier project namespaces",
+    "full-market realtime providers",
+    "MorningPool and CloseScan",
+    "execution choreography",
+    "notifications and scheduler definitions",
+    "dashboard and production runtime",
+    "RC archives and runtime data"
+  ]
+}
