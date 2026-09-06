@@ -33,6 +33,20 @@ def test_archive_scan_allows_v5_2_package_name(tmp_path):
     assert acceptance.scan_archive(archive) == []
 
 
+def test_archive_scan_allows_only_the_credential_contract_module(tmp_path):
+    archive = tmp_path / "contracts.whl"
+    with zipfile.ZipFile(archive, "w") as handle:
+        handle.writestr("v5_2/providers/credentials.py", "")
+    assert acceptance.scan_archive(archive) == []
+
+    bad_archive = tmp_path / "secret.whl"
+    with zipfile.ZipFile(bad_archive, "w") as handle:
+        handle.writestr("v5_2/providers/credentials.json", "{}")
+    assert acceptance.scan_archive(bad_archive) == [
+        "v5_2/providers/credentials.json"
+    ]
+
+
 def test_sdist_scan_rejects_legacy_member(tmp_path):
     archive = tmp_path / "bad.tar.gz"
     payload = b"{}"

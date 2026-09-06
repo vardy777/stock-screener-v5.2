@@ -38,9 +38,15 @@ class RetryPolicyV1:
             raise ValueError("policy_version must not be empty")
 
     def run(self, operation: Callable[[], T], sleeper: Callable[[float], None]) -> T:
+        result, _ = self.run_observed(operation, sleeper)
+        return result
+
+    def run_observed(
+        self, operation: Callable[[], T], sleeper: Callable[[float], None]
+    ) -> tuple[T, int]:
         for attempt in range(self.max_attempts):
             try:
-                return operation()
+                return operation(), attempt + 1
             except TransientProviderError:
                 if attempt + 1 >= self.max_attempts:
                     raise

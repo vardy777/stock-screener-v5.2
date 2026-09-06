@@ -2,10 +2,16 @@ from __future__ import annotations
 
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Protocol
 
 from v5_2.data.checkpoints import CheckpointStore, CheckpointV1
-from v5_2.data.raw_artifacts import RawArtifactError, RawArtifactStore, RawPayloadArtifactV1
+from v5_2.data.raw_artifacts import (
+    AcquisitionReceiptV1,
+    RawArtifactError,
+    RawArtifactStore,
+    RawPayloadArtifactV1,
+)
 from v5_2.providers.contracts import ProviderRequestV1
 from v5_2.providers.credentials import Credential
 from v5_2.providers.rate_limit import RateLimiter
@@ -33,6 +39,7 @@ class AcquisitionControls:
     rate_limiter: RateLimiter
     monotonic_clock: Callable[[], float]
     sleeper: Callable[[float], None]
+    utc_clock: Callable[[], datetime]
 
 
 def acquire_pages(
@@ -70,7 +77,7 @@ def acquire_pages(
     while True:
         expected_identity = {"offset": offset}
         controls.rate_limiter.acquire(controls.monotonic_clock, controls.sleeper)
-        page = controls.retry_policy.run(
+        page, attempts = controls.retry_policy.run_observed(
             lambda: client.fetch_page(
                 request, credential, page_identity=expected_identity
             ),
@@ -88,6 +95,19 @@ def acquire_pages(
             },
         )
         raw_store.put_payload(request.source_name, request.dataset_kind, artifact)
+        raw_store.put_receipt(
+            AcquisitionReceiptV1.create(
+                payload_hash=artifact.payload_hash,
+                acquired_at=controls.utc_clock(),
+                attempt_metadata={
+                    "attempts": attempts,
+                    "retry_policy_version": controls.retry_policy.policy_version,
+                },
+                transport_metadata={
+                    "min_interval_seconds": controls.rate_limiter.min_interval_seconds
+                },
+            )
+        )
         produced.append(artifact)
         accepted.append(artifact.payload_hash)
         row_count = len(page.rows)

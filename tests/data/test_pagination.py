@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -33,6 +34,7 @@ def controls(sleeps: list[float] | None = None) -> AcquisitionControls:
         rate_limiter=RateLimiter(min_interval_seconds=0.0),
         monotonic_clock=lambda: 0.0,
         sleeper=observed.append,
+        utc_clock=lambda: datetime(2026, 1, 1, tzinfo=timezone.utc),
     )
 
 
@@ -68,6 +70,7 @@ def test_pagination_stops_on_short_page_and_checkpoints_each_page(tmp_path: Path
     )
     assert client.offsets == [0, 2, 4]
     assert len(artifacts) == 3
+    assert len(tuple((tmp_path / "receipts").rglob("*.json"))) == 3
     assert CheckpointStore(tmp_path).load(request().request_id).next_offset == 5
 
 
@@ -157,6 +160,7 @@ def test_transient_page_failure_uses_bounded_retry_controls(tmp_path: Path) -> N
         rate_limiter=RateLimiter(min_interval_seconds=0.0),
         monotonic_clock=lambda: 0.0,
         sleeper=sleeps.append,
+        utc_clock=lambda: datetime(2026, 1, 1, tzinfo=timezone.utc),
     )
     acquire_pages(
         request=request(),

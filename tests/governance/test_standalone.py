@@ -92,14 +92,22 @@ def test_project_configuration_is_self_contained():
     assert (ROOT / "AGENTS.md").is_file()
 
 
-def test_raw_cache_ignore_rule_does_not_hide_source_packages():
+def test_raw_cache_ignore_rule_does_not_hide_source_packages(tmp_path):
     source_probe = "src/v5_2/data/identity.py"
     raw_probe = "data/raw/tushare/page.json"
+    (tmp_path / ".gitignore").write_text(
+        (ROOT / ".gitignore").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    (tmp_path / source_probe).parent.mkdir(parents=True)
+    (tmp_path / source_probe).write_text("", encoding="utf-8")
+    (tmp_path / raw_probe).parent.mkdir(parents=True)
+    (tmp_path / raw_probe).write_text("", encoding="utf-8")
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
     source = subprocess.run(
-        ["git", "check-ignore", "-q", source_probe], cwd=ROOT, check=False
+        ["git", "check-ignore", "-q", source_probe], cwd=tmp_path, check=False
     )
     raw = subprocess.run(
-        ["git", "check-ignore", "-q", raw_probe], cwd=ROOT, check=False
+        ["git", "check-ignore", "-q", raw_probe], cwd=tmp_path, check=False
     )
     assert source.returncode == 1
     assert raw.returncode == 0

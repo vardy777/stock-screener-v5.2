@@ -78,6 +78,19 @@ def test_store_rejects_existing_path_with_different_content(tmp_path: Path) -> N
         store.put_payload("tushare_pro", "daily_bar", payload())
 
 
+def test_receipts_are_immutable_and_round_trip_verified(tmp_path: Path) -> None:
+    store = RawArtifactStore(tmp_path)
+    receipt = AcquisitionReceiptV1.create(
+        payload_hash=payload().payload_hash,
+        acquired_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        attempt_metadata={"attempts": 2, "retry_policy_version": "retry-v1"},
+        transport_metadata={"rate_limit_policy": "interval-v1"},
+    )
+    path = store.put_receipt(receipt)
+    assert store.put_receipt(receipt) == path
+    assert store.read_receipt(path) == receipt
+
+
 @pytest.mark.parametrize("forbidden", ["token", "credential", "authorization", "api_key"])
 def test_artifacts_reject_secret_shaped_fields(forbidden: str) -> None:
     with pytest.raises(RawArtifactError, match="secret-shaped"):

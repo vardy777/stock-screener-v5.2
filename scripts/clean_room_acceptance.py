@@ -30,7 +30,11 @@ def scan_archive(path: Path) -> list[str]:
         lowered = name.lower()
         if parts & FORBIDDEN_PARTS or member.name in FORBIDDEN_FILES:
             findings.append(name)
-        elif "runtime_facts" in lowered or "credentials" in lowered or "register_task" in lowered:
+        elif (
+            "runtime_facts" in lowered
+            or ("credentials" in lowered and not lowered.endswith("v5_2/providers/credentials.py"))
+            or "register_task" in lowered
+        ):
             findings.append(name)
     return sorted(findings)
 
@@ -47,6 +51,7 @@ def main() -> int:
     source = Path(__file__).resolve().parents[1]
     env = dict(os.environ)
     env.pop("PYTHONPATH", None)
+    env.pop("TUSHARE_TOKEN", None)
     results: dict[str, object] = {"python": sys.version.split()[0]}
     with tempfile.TemporaryDirectory(prefix="v52-clean-room-") as temporary:
         room = Path(temporary) / "source"

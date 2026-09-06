@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from v5_2.providers.contracts import ProviderRequestV1
+from v5_2.providers.contracts import HistoricalProviderClient, ProviderRequestV1
 from v5_2.providers.credentials import load_tushare_credential
 from v5_2.providers.tushare import ProviderContractError, TushareClient
 
@@ -38,6 +38,7 @@ def test_allowlisted_endpoint_uses_injected_transport_and_sanitizes_page() -> No
     assert page.request_id == request().request_id
     assert page.rows == ({"ts_code": "000001.SZ"},)
     assert "sentinel" not in repr(page)
+    assert isinstance(client, HistoricalProviderClient)
 
 
 def test_arbitrary_or_mismatched_endpoint_is_rejected_before_transport() -> None:

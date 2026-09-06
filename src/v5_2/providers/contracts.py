@@ -4,9 +4,13 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 import json
 from types import MappingProxyType
-from typing import Any
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from v5_2.data.identity import canonical_json, content_hash
+
+if TYPE_CHECKING:
+    from v5_2.providers.credentials import Credential
+    from v5_2.providers.tushare import ProviderPageV1
 
 
 def _nonempty(name: str, value: object) -> str:
@@ -67,3 +71,14 @@ class ProviderRequestV1:
             request_policy_version=identity_payload["request_policy_version"],
             request_id=content_hash(identity_payload),
         )
+
+
+@runtime_checkable
+class HistoricalProviderClient(Protocol):
+    def fetch_page(
+        self,
+        request: ProviderRequestV1,
+        credential: Credential,
+        *,
+        page_identity: Mapping[str, int],
+    ) -> ProviderPageV1: ...

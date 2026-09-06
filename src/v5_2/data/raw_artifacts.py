@@ -97,6 +97,15 @@ class AcquisitionReceiptV1:
         }
         return cls(**body, receipt_hash=content_hash(body))
 
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "payload_hash": self.payload_hash,
+            "acquired_at": self.acquired_at,
+            "attempt_metadata": self.attempt_metadata,
+            "transport_metadata": self.transport_metadata,
+            "receipt_hash": self.receipt_hash,
+        }
+
 
 def observe_revision(previous: RawPayloadArtifactV1, current: RawPayloadArtifactV1) -> bool:
     if (
@@ -166,3 +175,31 @@ class RawArtifactStore:
             artifact = self.read_payload(matches[0])
             if artifact.request_id != request_id or artifact.payload_hash != payload_hash:
                 raise RawArtifactError("raw artifact identity mismatch")
+
+    def put_receipt(self, receipt: AcquisitionReceiptV1) -> Path:
+        path = (
+            self.root
+            / "receipts"
+            / receipt.payload_hash[:16]
+            / f"{receipt.receipt_hash}.json"
+        )
+        content = canonical_json(receipt.as_dict())
+        path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL)
+        except FileExistsError:
+            if path.read_bytes() != content:
+                raise RawArtifactError("immutable receipt collision")
+            return path
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(content)
+        return path
+
+    def read_receipt(self, path: Path) -> AcquisitionReceiptV1:
+        stored = json.loads(path.read_text(encoding="utf-8"))
+        claimed = stored.pop("receipt_hash", None)
+        stored["acquired_at"] = datetime.fromisoformat(stored["acquired_at"])
+        receipt = AcquisitionReceiptV1.create(**stored)
+        if claimed != receipt.receipt_hash:
+            raise RawArtifactError("receipt hash mismatch")
+        return receipt

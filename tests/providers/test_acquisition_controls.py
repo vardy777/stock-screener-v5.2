@@ -63,6 +63,23 @@ def test_transient_failure_retries_with_versioned_exponential_backoff() -> None:
     assert sleeps == [1.5, 3.0]
 
 
+def test_retry_reports_actual_attempt_count_for_acquisition_receipt() -> None:
+    attempts = 0
+
+    def operation() -> str:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise TransientProviderError("temporary")
+        return "ok"
+
+    result, observed_attempts = RetryPolicyV1(2, 0.0, 0.0, "retry-v1").run_observed(
+        operation, lambda _: None
+    )
+    assert result == "ok"
+    assert observed_attempts == 2
+
+
 def test_retry_is_bounded_and_raises_last_sanitized_transient_error() -> None:
     attempts = 0
 
