@@ -16,6 +16,7 @@ from v5_2.data.phase_1b1_policies import phase_1b1_policies  # noqa: E402
 from v5_2.data.phase_1b1_requests import phase_1b1_requests  # noqa: E402
 from v5_2.data.raw_artifacts import RawArtifactStore  # noqa: E402
 from v5_2.data.real_audits.validators import AuditDecision, audit_security_master, audit_trade_calendar  # noqa: E402
+from v5_2.data.real_audits.security_master_normalization import SecurityMasterNormalizationError, SecurityMasterNormalizationPolicyV1  # noqa: E402
 from v5_2.data.source_approval import SourceApprovalArtifactV1  # noqa: E402
 
 
@@ -42,7 +43,9 @@ def _evidence(kind, status, now, source_version, inputs, findings=()):
 
 
 def main() -> int:
-    now = datetime.now(timezone.utc)
+    # Frozen audit resolution time: replaying identical inputs must not change
+    # equivalence or approval identities merely because the command ran later.
+    now = datetime(2026, 9, 6, tzinfo=timezone.utc)
     output = ROOT / "data" / "phase_1b1" / "governance"
     output.mkdir(parents=True, exist_ok=True)
     policies = phase_1b1_policies()
@@ -61,11 +64,23 @@ def main() -> int:
             cross = ("2025 SSE/SZSE official holiday sample: 78/78 matched", "2010-2024 deterministic official sample incomplete")
         elif dataset_kind == "security_master":
             audit = audit_security_master(rows)
+            normalization_policy = SecurityMasterNormalizationPolicyV1.create_default()
+            unsupported = 0
+            for row in rows:
+                try:
+                    normalization_policy.normalize(row)
+                except SecurityMasterNormalizationError:
+                    unsupported += 1
+            inputs = tuple(sorted((*inputs, normalization_policy.policy_id)))
             coverage = (date(1990, 12, 19), date(2025, 12, 31))
             fields_tested = ("ts_code", "symbol", "name", "market", "exchange", "list_status", "list_date", "delist_date")
             endpoints = ("stock-basic",)
             mapping = {"name": "security_name", "market": "board", "ts_code/exchange": "security_type,is_a_share"}
-            cross = ("deterministic SSE/SZSE official identity sample not completed",)
+            cross = (
+                "deterministic SSE/SZSE official identity sample not completed",
+                f"normalization_policy={normalization_policy.policy_id}",
+                f"unsupported_native_rows={unsupported}",
+            )
         else:
             audit = None
             coverage = (date(2024, 1, 1), date(2025, 12, 31))

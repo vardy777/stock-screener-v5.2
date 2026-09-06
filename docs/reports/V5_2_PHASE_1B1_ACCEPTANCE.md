@@ -82,3 +82,81 @@ READY FOR LABEL ENGINE = NO
 ```
 
 The aggregate gates remain FAIL wherever daily-bar work is correctly blocked or cross-source evidence is incomplete. This does not mean the DataHub source has been rejected; it means the evidence threshold for approval has not yet been met.
+
+## Final re-validation — supersedes earlier generated identities
+
+This section records the final close attempt at repository HEAD after freezing `SecurityMasterNormalizationPolicyV1`. It supersedes the generated IDs earlier in this report; the historical FAIL narrative above is retained deliberately.
+
+```text
+security_master normalization policy = a3d64de6826ce8ad57ca64d3225860770c41e0c25a76900777e50966e7653932
+security_master input rows = 5549
+security_master deterministically normalized rows = 5546
+security_master unsupported rows = 3
+
+trade_calendar equivalence evidence = 578ff31e85d21f1864c5a01c0f4bf084749e0f565efdf73cfd6c9d2d550ebbb2
+trade_calendar approval = 97f37b1b5983ee14728de550b9b649a7a86a0e550570b71c969d44b26279dc23 (PENDING)
+
+security_master equivalence evidence = a4d724784e340c29f6e522768fbb762796b93ba2837d353ccaad3891600fe7f9
+security_master approval = 9fc23825b06e65892d2b0b8970598d94c0efb7f2e6205b8e97b9b88e5fcd2649 (PENDING)
+
+daily_bar equivalence evidence = 5767a07de72e79f223e1a26bf81aea597d44074018dd59770e3e17697697125c
+daily_bar approval = 678c9c4df38d53620aab61f233cdadcdfa2283e29fed5dda625a45b7800a8d5a (PENDING)
+
+equivalence replay summary SHA-256 = 5A78BFE24151A85CDDF270066CE506C1C53063107DEC7694A13D20919BE6A8A3
+repeated finalization hash match = True
+```
+
+The three unsupported master rows have unknown or missing provider `market` values. The normalization policy fails closed; it does not default them to a main board or A-share. Official deterministic verification for all required calendar years and master identities remains incomplete. Therefore daily-bar acquisition remains prohibited by the upstream approval gate.
+
+## Complete verification command record
+
+Every command below was executed from the repository root. Exit code was zero unless explicitly described otherwise.
+
+```text
+COMMAND:
+.\.venv\Scripts\python.exe -m pytest tests/data/test_dataset_equivalence.py tests/data/test_pagination.py tests/data/test_source_approval.py tests/data/test_manifests.py tests/real_audits/test_security_master_normalization.py -q
+RESULT:
+36 passed in 0.11s
+
+COMMAND:
+.\.venv\Scripts\python.exe -m pytest -q
+RESULT:
+175 passed in 0.63s
+
+COMMAND:
+.\.venv\Scripts\python.exe scripts/verify_standalone.py
+RESULT:
+PASS forbidden imports: 0
+PASS forbidden active paths/dependencies: 0
+PASS prohibited repository inventory: 0
+PASS phase 1a architecture boundary violations: 0
+
+COMMAND:
+.\.venv\Scripts\python.exe scripts/clean_room_acceptance.py
+RESULT:
+clean-room dependencies/install/tests = true
+wheel install/smoke = true
+zero dependency acceptance = true
+clean-room test output = 175 passed in 0.99s
+
+COMMAND:
+.\.venv\Scripts\python.exe scripts/phase_1b1_finalize.py (executed twice)
+RESULT:
+trade_calendar rows=11688, equivalence=INSUFFICIENT_EVIDENCE, approval=PENDING
+security_master rows=5549, equivalence=INSUFFICIENT_EVIDENCE, approval=PENDING
+daily_bar rows=0, equivalence=INSUFFICIENT_EVIDENCE, approval=PENDING
+summary hashes from both runs matched exactly
+
+COMMAND:
+actual credential and sentinel scan over tracked/runtime artifact areas
+RESULT:
+PASS actual credential confined to ignored .env
+PASS credential/sentinel artifact findings: 0
+
+COMMAND:
+git diff --check
+RESULT:
+exit 0; no whitespace errors
+```
+
+Final full-suite and environmental command timings may vary across runs. The exit commit records the last fresh results below before push.
