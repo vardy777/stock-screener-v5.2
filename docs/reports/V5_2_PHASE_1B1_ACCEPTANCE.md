@@ -266,3 +266,83 @@ RESULT: actual credential confined to ignored .env; credential/sentinel artifact
 COMMAND: git diff --check
 RESULT: exit 0; no whitespace errors
 ```
+
+## Approval-policy adequacy review — Outcome C
+
+This is the latest re-evaluation and supersedes only the current status fields above. All V1 artifacts and earlier PENDING decisions remain immutable and reproducible.
+
+```text
+ApprovalPolicyAdequacyReviewV1 = 85f38a57975b56eac4352571f35f20712865a9b326d515b6bea006b22bafa449
+CrossSourceEvidencePolicyV2 = 4112a50ce8f06b1b9f685bb19804488888c8d641f6465dc9e152dd505ad889b6
+CrossSourceEvidencePolicyV2 status = DESIGNED_NOT_ADOPTED
+decision = RETAIN_V1_PENDING
+```
+
+### Gate analysis
+
+- Coverage and continuity prevent silent truncation and missing historical sessions; they directly protect data correctness.
+- Explicit session state and previous-session consistency prevent weekday inference and incorrect event alignment; they directly protect PIT/session semantics.
+- Delisted-security coverage and effective-dated identity prevent current-membership survivorship contamination; they directly protect historical-universe correctness.
+- Replay, revision and pagination gates prevent mutable provider responses, repeated pages and transport observations from silently changing research facts.
+- Cross-source comparison detects provider semantic/value errors. `MISMATCH`, `UNRESOLVED_EVIDENCE`, `PROVIDER_ERROR`, and `OFFICIAL_REFERENCE_UNAVAILABLE` are now distinct machine states. Unresolved evidence is not counted as a mismatch.
+- V1's requirement for official resolution of every frozen sample is stricter than necessary for functional equivalence and can be blocked by archive availability rather than provider quality. However, replacing it now would be result-driven: no Tier 3 independent deterministic sample exists yet.
+- V2 therefore defines four honest tiers: structured official records, official notices, independent trusted data, and internal invariant/replay evidence. Tier 3/4 never impersonate official truth. Its predeclared gate requires official anchors, 256 independent samples, and zero unexplained mismatches.
+
+V2 could support `EQUIVALENT_WITH_RULES` at lower operational cost while remaining strict because independent observations test the entire frozen sample inventory and official records anchor semantics. It is not adopted in this revision because the required independent sample has not been acquired. No threshold was tuned against the current provider result.
+
+### Security quarantine and survivorship impact
+
+Two `QuarantinedSecurityIdentityV1` artifacts were generated. Formal universe filtering excludes them, explicit requests fail closed, and their raw/evidence lineage is retained. The manifest contract now pins input, eligible, excluded and quarantined counts, quarantine hashes, normalization policy and approval-policy identity.
+
+- `T600018.SH`: possible interval 2000-07-19 through 2006-10-20. Quarantine creates a bounded false exclusion, but the interval predates the acquired calendar, so affected trading-session count cannot be computed from approved inputs.
+- `302132.SZ`: possible start 2010-08-27; the code-reassignment effective date and predecessor lineage are unresolved. Impact is unbounded false exclusion or cross-identity historical corruption.
+
+Quarantine reliably prevents contamination, but approving only the remaining identities would still permit survivorship bias through false exclusion. Because one impact interval is unbounded, quarantine is not sufficient for security-master approval under the current historical-universe contract.
+
+### Decision gate
+
+```text
+APPROVAL POLICY ADEQUACY REVIEW = PASS
+
+TRADE CALENDAR POLICY V1 = RETAINED
+TRADE CALENDAR APPROVAL = PENDING
+
+SECURITY MASTER POLICY V1 = RETAINED
+SECURITY MASTER APPROVAL = PENDING
+SECURITY MASTER QUARANTINED IDENTITIES = 2
+
+DAILY BAR ENTRY UNLOCKED = NO
+DAILY BAR ACQUISITION = NOT STARTED
+
+PHASE 1B-1 = FAIL
+READY FOR PHASE 1B-2 = NO
+HISTORICAL PIT DATA = FAIL
+READY FOR LABEL ENGINE = NO
+```
+
+### Verification record for adequacy review
+
+```text
+COMMAND: .\.venv\Scripts\python.exe scripts/review_phase_1b1_policy.py (executed twice)
+RESULT: identical review/policy IDs on both runs; RETAIN_V1_PENDING; quarantined=2; daily_bar unlocked=NO
+
+COMMAND: .\.venv\Scripts\python.exe -m pytest tests/real_audits/test_policy_adequacy.py tests/real_audits/test_blocker_evidence.py tests/real_audits/test_security_master_normalization.py tests/data/test_manifests.py -q
+RESULT: 27 passed in 0.18s
+
+COMMAND: .\.venv\Scripts\python.exe -m pytest -q
+RESULT: 186 passed in 0.82s
+```
+
+```text
+COMMAND: .\.venv\Scripts\python.exe scripts/verify_standalone.py
+RESULT: forbidden imports=0; forbidden active paths/dependencies=0; prohibited repository inventory=0; phase 1a architecture boundary violations=0
+
+COMMAND: .\.venv\Scripts\python.exe scripts/clean_room_acceptance.py
+RESULT: build=true; clean_room_dependencies=true; clean_room_install=true; clean_room_tests=true; wheel_install=true; wheel_smoke=true; zero_dependency_acceptance=true; clean-room test output="186 passed in 1.13s"
+
+COMMAND: actual credential and sentinel scan over tracked/runtime artifact areas
+RESULT: actual credential confined to ignored .env; credential/sentinel artifact findings=0
+
+COMMAND: git diff --check
+RESULT: exit 0; no whitespace errors
+```

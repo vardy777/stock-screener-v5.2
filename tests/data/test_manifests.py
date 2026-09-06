@@ -113,6 +113,28 @@ def test_datahub_manifest_requires_extended_equivalence_and_transport_lineage() 
         )
 
 
+def test_datahub_manifest_pins_quarantine_counts_and_hashes() -> None:
+    selected = replace(
+        approval(), source_name="datahubco_tushare_proxy", dataset_kind="security_master",
+        equivalence_evidence_id="equivalence-id",
+    )
+    result = DatasetManifestV1.create(
+        created_at=NOW, source_name="datahubco_tushare_proxy", dataset_kind="security_master",
+        approval=selected, approval_resolution_as_of=NOW,
+        coverage_start=date(2020, 1, 1), coverage_end=date(2020, 12, 31),
+        row_count=8, symbol_count=8, raw_payload_hashes=("a" * 64,),
+        normalized_content_hashes=("b" * 64,), fact_content_hashes=("c" * 64,),
+        normalizer_version="v1", availability_policy_version="v1", quality_findings=(),
+        pit_validation_status="PASS", rule_compliance_status="PASS", pagination_complete=True,
+        audit_policy_id="audit", endpoint_identities=("stock-basic",), receipt_hashes=("receipt",),
+        input_count=10, eligible_count=8, excluded_non_target_count=1, quarantined_count=1,
+        quarantined_identity_hashes=("q" * 64,), approval_policy_id="approval-policy-v1",
+    )
+    assert result.input_count == 10
+    assert result.quarantined_count == 1
+    assert result.quarantined_identity_hashes == ("q" * 64,)
+
+
 def test_future_revocation_does_not_change_old_manifest_identity() -> None:
     selected = approval()
     old = manifest(selected)

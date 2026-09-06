@@ -37,6 +37,12 @@ class DatasetManifestV1:
     audit_policy_id: str | None
     endpoint_identities: tuple[str, ...]
     receipt_hashes: tuple[str, ...]
+    input_count: int | None
+    eligible_count: int | None
+    excluded_non_target_count: int | None
+    quarantined_count: int | None
+    quarantined_identity_hashes: tuple[str, ...]
+    approval_policy_id: str | None
     manifest_hash: str
 
     @classmethod
@@ -64,6 +70,12 @@ class DatasetManifestV1:
         audit_policy_id: str | None = None,
         endpoint_identities: tuple[str, ...] = (),
         receipt_hashes: tuple[str, ...] = (),
+        input_count: int | None = None,
+        eligible_count: int | None = None,
+        excluded_non_target_count: int | None = None,
+        quarantined_count: int | None = None,
+        quarantined_identity_hashes: tuple[str, ...] = (),
+        approval_policy_id: str | None = None,
     ) -> DatasetManifestV1:
         approving = {ApprovalDecision.APPROVED, ApprovalDecision.APPROVED_WITH_RULES}
         if approval.decision not in approving:
@@ -90,8 +102,18 @@ class DatasetManifestV1:
             or not audit_policy_id
             or not endpoint_identities
             or not receipt_hashes
+            or not approval_policy_id
         ):
             raise ManifestError("DataHub manifest requires extended lineage")
+        if source_name == "datahubco_tushare_proxy" and dataset_kind == "security_master":
+            counts = (input_count, eligible_count, excluded_non_target_count, quarantined_count)
+            if any(value is None or value < 0 for value in counts):
+                raise ManifestError("security master disposition counts are invalid")
+            assert all(value is not None for value in counts)
+            if eligible_count + excluded_non_target_count + quarantined_count != input_count:
+                raise ManifestError("security master disposition counts do not reconcile")
+            if eligible_count != row_count or len(quarantined_identity_hashes) != quarantined_count:
+                raise ManifestError("security master quarantine lineage is incomplete")
         for name, value in (
             ("created_at", created_at),
             ("approval_resolution_as_of", approval_resolution_as_of),
@@ -123,6 +145,12 @@ class DatasetManifestV1:
             "audit_policy_id": audit_policy_id,
             "endpoint_identities": tuple(sorted(set(endpoint_identities))),
             "receipt_hashes": tuple(sorted(set(receipt_hashes))),
+            "input_count": input_count,
+            "eligible_count": eligible_count,
+            "excluded_non_target_count": excluded_non_target_count,
+            "quarantined_count": quarantined_count,
+            "quarantined_identity_hashes": tuple(sorted(set(quarantined_identity_hashes))),
+            "approval_policy_id": approval_policy_id,
         }
         digest = content_hash(body)
         values = dict(body)
