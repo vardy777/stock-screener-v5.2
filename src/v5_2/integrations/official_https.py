@@ -61,5 +61,3 @@ class VerifiedHttpsTransportV1:
             if urlparse(final_url).scheme.lower() != "https":
                 raise RuntimeError("HTTPS downgrade redirect rejected")
             return response.read()
-
-
