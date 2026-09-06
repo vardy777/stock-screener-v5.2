@@ -15,6 +15,10 @@ class ApprovalEvaluationError(RuntimeError):
     """Approval inputs are inconsistent or ambiguous."""
 
 
+class ApprovalResolutionError(RuntimeError):
+    """No unique approval exists for an explicit historical resolution."""
+
+
 class ApprovalDecision(str, Enum):
     APPROVED = "APPROVED"
     APPROVED_WITH_RULES = "APPROVED_WITH_RULES"
@@ -119,3 +123,109 @@ class SourceApprovalArtifactV1:
             evaluator_version=evaluator_version,
             supersedes_approval_id=supersedes_approval_id,
         )
+
+
+@dataclass(frozen=True, slots=True)
+class SourceApprovalRevocationArtifactV1:
+    revocation_id: str
+    approval_id: str
+    reason: str
+    effective_at: datetime
+    created_at: datetime
+    evidence_ids: tuple[str, ...]
+    policy_version: str
+    content_hash: str
+
+    @classmethod
+    def create(
+        cls,
+        *,
+        approval_id: str,
+        reason: str,
+        effective_at: datetime,
+        created_at: datetime,
+        evidence_ids: Sequence[str],
+        policy_version: str,
+    ) -> SourceApprovalRevocationArtifactV1:
+        if not reason.strip():
+            raise ApprovalEvaluationError("revocation reason must not be empty")
+        for name, value in (("effective_at", effective_at), ("created_at", created_at)):
+            if value.tzinfo is None or value.utcoffset() is None:
+                raise ApprovalEvaluationError(f"{name} must be timezone-aware")
+        identifiers = tuple(sorted(set(evidence_ids)))
+        if not identifiers:
+            raise ApprovalEvaluationError("revocation evidence must not be empty")
+        body = {
+            "schema_version": "SourceApprovalRevocationArtifactV1",
+            "approval_id": approval_id,
+            "reason": reason.strip(),
+            "effective_at": effective_at,
+            "created_at": created_at,
+            "evidence_ids": identifiers,
+            "policy_version": policy_version,
+        }
+        digest = content_hash(body)
+        return cls(
+            revocation_id=digest,
+            content_hash=digest,
+            approval_id=approval_id,
+            reason=reason.strip(),
+            effective_at=effective_at,
+            created_at=created_at,
+            evidence_ids=identifiers,
+            policy_version=policy_version,
+        )
+
+
+class ApprovalResolver:
+    def __init__(
+        self,
+        approvals: Sequence[SourceApprovalArtifactV1],
+        revocations: Sequence[SourceApprovalRevocationArtifactV1],
+    ) -> None:
+        self._approvals = tuple(approvals)
+        self._revocations = tuple(revocations)
+
+    def resolve(
+        self,
+        *,
+        source_name: str,
+        dataset_kind: str,
+        requested_coverage: tuple[date, date],
+        resolution_as_of: datetime,
+    ) -> str:
+        if resolution_as_of.tzinfo is None or resolution_as_of.utcoffset() is None:
+            raise ApprovalResolutionError("resolution_as_of must be timezone-aware")
+        coverage_start, coverage_end = requested_coverage
+        if coverage_end < coverage_start:
+            raise ApprovalResolutionError("requested coverage is invalid")
+        approving = {ApprovalDecision.APPROVED, ApprovalDecision.APPROVED_WITH_RULES}
+        candidates = {
+            item.approval_id: item
+            for item in self._approvals
+            if item.source_name == source_name
+            and item.dataset_kind == dataset_kind
+            and item.decision in approving
+            and item.coverage_start <= coverage_start
+            and item.coverage_end >= coverage_end
+            and item.verified_at <= resolution_as_of
+        }
+        revoked = {
+            item.approval_id
+            for item in self._revocations
+            if item.created_at <= resolution_as_of and item.effective_at <= resolution_as_of
+        }
+        for approval_id in revoked:
+            candidates.pop(approval_id, None)
+        superseded = {
+            item.supersedes_approval_id
+            for item in candidates.values()
+            if item.supersedes_approval_id is not None
+        }
+        for approval_id in superseded:
+            candidates.pop(approval_id, None)
+        if not candidates:
+            raise ApprovalResolutionError("no applicable approval")
+        if len(candidates) != 1:
+            raise ApprovalResolutionError("ambiguous applicable approvals")
+        return next(iter(candidates))
