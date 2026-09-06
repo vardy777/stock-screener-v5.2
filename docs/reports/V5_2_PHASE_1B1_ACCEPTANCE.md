@@ -267,9 +267,147 @@ COMMAND: git diff --check
 RESULT: exit 0; no whitespace errors
 ```
 
-## Approval-policy adequacy review — Outcome C
+## Current acceptance result
 
-This is the latest re-evaluation and supersedes only the current status fields above. All V1 artifacts and earlier PENDING decisions remain immutable and reproducible.
+The final, superseding result is the Tier 3 and identity-lineage re-evaluation in this report: calendar and security master remain PENDING; V2 remains DESIGNED_NOT_ADOPTED; daily-bar entry remains locked; Phase 1B-1 remains FAIL.
+
+The current verification record is: focused tests 34 passed in 0.20s; full suite 193 passed in 0.99s; standalone boundary checks all passed; clean-room build/install/test/wheel/smoke passed with 193 passed in 1.24s; credential/sentinel findings 0; .env is ignored and untracked; git diff --check exited 0.
+
+## Final superseding status — Tier 3 and identity lineage
+
+The current decision is the Tier 3/identity-lineage result recorded above, not the retained historical two-quarantine snapshot.
+
+```text
+TIER 3 SOURCE INDEPENDENCE = PASS
+CALENDAR TIER 3 SAMPLE = MATCH 128 / MISMATCH 0 / UNRESOLVED 128 / PROVIDER_ERROR 0
+CROSS SOURCE POLICY V2 = DESIGNED_NOT_ADOPTED
+TRADE CALENDAR APPROVAL = PENDING
+
+302132 HISTORICAL IDENTITY = RESOLVED
+SECURITY MASTER QUARANTINED IDENTITIES = 1
+SECURITY MASTER APPROVAL = PENDING
+
+DAILY BAR ENTRY UNLOCKED = NO
+DAILY BAR ACQUISITION = NOT STARTED
+PHASE 1B-1 = FAIL
+READY FOR PHASE 1B-2 = NO
+HISTORICAL PIT DATA = FAIL
+READY FOR LABEL ENGINE = NO
+```
+
+### Final repository verification
+
+```text
+COMMAND: .\.venv\Scripts\python.exe -m pytest -q
+RESULT: 193 passed in 0.99s
+
+COMMAND: .\.venv\Scripts\python.exe scripts\verify_standalone.py
+RESULT: forbidden imports=0; forbidden active paths/dependencies=0; prohibited repository inventory=0; phase 1a architecture boundary violations=0
+
+COMMAND: .\.venv\Scripts\python.exe scripts\clean_room_acceptance.py
+RESULT: build=true; clean_room_dependencies=true; clean_room_install=true; clean_room_tests=true; wheel_install=true; wheel_smoke=true; zero_dependency_acceptance=true; clean-room test output="193 passed in 1.24s"
+
+COMMAND: actual credential plus sentinel scan over runtime artifact areas; git check-ignore .env; git tracked-file check for .env
+RESULT: credential/sentinel findings=0; .env ignored; .env tracked=NO
+
+COMMAND: git diff --check
+RESULT: exit 0; no whitespace errors
+```
+
+## Tier 3 independent calendar evidence and identity-lineage re-evaluation
+
+This section is the latest Phase 1B-1 evaluation. It preserves all earlier V1 artifacts and decisions. BaoStock was used only as an independent audit source through the local ignored virtual environment; it was not added as a project or runtime dependency.
+
+### Independent trade-calendar comparison
+
+```text
+frozen sample inventory = 0242b7d10a358d81f5c1b40a42920ef75c55b1e42f6d1e6ea3a77d85b5e11cd0
+Tier 3 source identity = 51361caa8e8c23285d8c756d12cb7c45c6e7939a240b7db3dcd90b7cfe49713d
+Tier 3 source = BaoStock 0.9.3 / query_trade_dates
+source independence = PASS
+sample IDs reused exactly = 256 / 256
+
+MATCH = 128
+MISMATCH = 0
+UNRESOLVED = 128
+PROVIDER_ERROR = 0
+```
+
+BaoStock supplied independent SSE calendar observations. Its source contract was not extended to SZSE without evidence, so all 128 SZSE observations remain `UNRESOLVED`, not matches and not mismatches. Consequently, the frozen V2 completeness threshold is not met.
+
+```text
+CROSS SOURCE POLICY V2 = DESIGNED_NOT_ADOPTED
+TRADE CALENDAR APPROVAL = PENDING
+```
+
+### 302132.SZ effective-dated identity lineage
+
+Official SZSE evidence resolves the historical identity into this immutable graph:
+
+```text
+300114.SZ = 2010-08-27 through 2025-02-16
+transition = SECURITY_CODE_CHANGE
+302132.SZ = 2025-02-17 through open-ended
+effective identity graph = 6275f4df087e40a11eb12b4ece0e569865814002d4da301342c2279af98acda0
+```
+
+The remaining `T600018.SH` quarantine is bounded to 2000-07-19 through 2006-10-20 and has an empty intersection with research coverage beginning in 2010. This removes that quarantine as a coverage-overlap blocker, but it does not satisfy the still-incomplete frozen official deterministic identity sample gate.
+
+```text
+security-master re-evaluation = a58cc58eb70c754f00fc9f3b06e3894794550b4eb89f739460a889412065022b
+input rows = 5549
+eligible input rows = 5547
+normalized effective-dated facts = 5548
+excluded non-target = 1
+quarantined identities = 1
+quarantine coverage overlap = 0
+SECURITY MASTER APPROVAL = PENDING
+```
+
+### Current frozen decision
+
+```text
+TIER 3 INDEPENDENT SOURCE = BaoStock 0.9.3 / query_trade_dates
+TIER 3 SOURCE INDEPENDENCE = PASS
+CALENDAR TIER 3 SAMPLE MATCH = 128
+CALENDAR TIER 3 SAMPLE MISMATCH = 0
+CALENDAR TIER 3 SAMPLE UNRESOLVED = 128
+CALENDAR TIER 3 SAMPLE PROVIDER_ERROR = 0
+CROSS SOURCE POLICY V2 = DESIGNED_NOT_ADOPTED
+TRADE CALENDAR APPROVAL = PENDING
+
+302132 HISTORICAL IDENTITY = RESOLVED
+SECURITY MASTER QUARANTINED IDENTITIES = 1
+SECURITY MASTER APPROVAL = PENDING
+
+DAILY BAR ENTRY UNLOCKED = NO
+DAILY BAR ACQUISITION = NOT STARTED
+
+PHASE 1B-1 = FAIL
+READY FOR PHASE 1B-2 = NO
+HISTORICAL PIT DATA = FAIL
+READY FOR LABEL ENGINE = NO
+```
+
+### Verification record for this re-evaluation
+
+```text
+COMMAND: .\.venv\Scripts\python.exe scripts\acquire_baostock_calendar_audit.py
+RESULT: independence=PASS; exact frozen inventory reused; total=256; match=128; mismatch=0; unresolved=128; provider_error=0
+
+COMMAND: .\.venv\Scripts\python.exe scripts\review_phase_1b1_policy.py (executed twice)
+RESULT: identical graph/re-evaluation IDs on both runs; input=5549; eligible_input=5547; normalized_facts=5548; excluded=1; quarantined=1; approval=PENDING; daily_bar unlocked=NO
+
+COMMAND: .\.venv\Scripts\python.exe -m pytest tests\real_audits\test_tier3_calendar.py tests\real_audits\test_identity_lineage.py tests\real_audits\test_policy_adequacy.py tests\real_audits\test_blocker_evidence.py tests\real_audits\test_security_master_normalization.py tests\data\test_manifests.py -q
+RESULT: 34 passed in 0.20s
+
+COMMAND: .\.venv\Scripts\python.exe -m pytest -q
+RESULT: 193 passed in 0.99s
+```
+
+## Historical approval-policy adequacy review — Outcome C
+
+This is the earlier pre-Tier-3 re-evaluation retained for immutable audit history. Its two-quarantine snapshot is superseded by the later Tier 3 and identity-lineage re-evaluation above; all V1 artifacts and PENDING decisions remain immutable and reproducible.
 
 ```text
 ApprovalPolicyAdequacyReviewV1 = 85f38a57975b56eac4352571f35f20712865a9b326d515b6bea006b22bafa449
@@ -346,3 +484,9 @@ RESULT: actual credential confined to ignored .env; credential/sentinel artifact
 COMMAND: git diff --check
 RESULT: exit 0; no whitespace errors
 ```
+
+## Current final acceptance result
+
+The superseding result is the Tier 3 and identity-lineage re-evaluation recorded above: calendar and security master remain PENDING; V2 remains DESIGNED_NOT_ADOPTED; daily-bar entry remains locked; Phase 1B-1 remains FAIL.
+
+Current verification: focused tests 34 passed in 0.20s; full suite 193 passed in 0.99s; standalone boundary checks passed; clean-room build/install/test/wheel/smoke passed with 193 passed in 1.24s; credential/sentinel findings 0; .env ignored and untracked; git diff --check exited 0.
