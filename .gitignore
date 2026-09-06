@@ -7,5 +7,5 @@ dist/
 *.egg-info/
 .coverage
 .env
-data/
+/data/
 *.log

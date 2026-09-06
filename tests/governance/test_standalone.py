@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import re
+import subprocess
 from pathlib import Path
 
 import v5_2
@@ -75,3 +76,16 @@ def test_project_configuration_is_self_contained():
     assert "setuptools==" in (ROOT / "requirements.lock").read_text(encoding="utf-8")
     assert (ROOT / "README.md").is_file()
     assert (ROOT / "AGENTS.md").is_file()
+
+
+def test_raw_cache_ignore_rule_does_not_hide_source_packages():
+    source_probe = "src/v5_2/data/identity.py"
+    raw_probe = "data/raw/tushare/page.json"
+    source = subprocess.run(
+        ["git", "check-ignore", "-q", source_probe], cwd=ROOT, check=False
+    )
+    raw = subprocess.run(
+        ["git", "check-ignore", "-q", raw_probe], cwd=ROOT, check=False
+    )
+    assert source.returncode == 1
+    assert raw.returncode == 0
