@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from types import MappingProxyType
 from typing import Any
 
@@ -73,6 +73,25 @@ class IndependentCalendarComparisonEvidenceV1:
     source_id: str
     content_hash: str
 
+    @classmethod
+    def from_records(cls, *, records: Sequence[Mapping[str, Any]], source_id: str):
+        frozen = tuple(MappingProxyType(dict(record)) for record in records)
+        counts = {status: 0 for status in EvidenceResolution}
+        for record in frozen:
+            counts[EvidenceResolution(record["resolution"])] += 1
+        body = {
+            "schema_version": "IndependentCalendarComparisonEvidenceV1",
+            "records": frozen,
+            "total": len(frozen),
+            "match_count": counts[EvidenceResolution.MATCH],
+            "mismatch_count": counts[EvidenceResolution.MISMATCH],
+            "unresolved_count": counts[EvidenceResolution.UNRESOLVED_EVIDENCE] + counts[EvidenceResolution.OFFICIAL_REFERENCE_UNAVAILABLE],
+            "provider_error_count": counts[EvidenceResolution.PROVIDER_ERROR],
+            "source_id": source_id,
+        }
+        digest = content_hash(body)
+        return cls(evidence_id=digest, content_hash=digest, **{key: value for key, value in body.items() if key != "schema_version"})
+
 
 def compare_independent_calendar(requests: Sequence[IndependentCalendarSampleRequestV1], observations: Mapping[str, int], source: IndependentSourceIdentityV1, *, official_anchors: Mapping[str, int]):
     supported = set(source.coverage_capability.get("exchanges", ()))
@@ -96,6 +115,84 @@ def compare_independent_calendar(requests: Sequence[IndependentCalendarSampleReq
     body = {"schema_version": "IndependentCalendarComparisonEvidenceV1", "records": tuple(records), "total": len(records), "match_count": counts[EvidenceResolution.MATCH], "mismatch_count": counts[EvidenceResolution.MISMATCH], "unresolved_count": counts[EvidenceResolution.UNRESOLVED_EVIDENCE], "provider_error_count": counts[EvidenceResolution.PROVIDER_ERROR], "source_id": source.source_id}
     digest = content_hash(body)
     return IndependentCalendarComparisonEvidenceV1(evidence_id=digest, content_hash=digest, **{k: v for k, v in body.items() if k != "schema_version"})
+
+
+@dataclass(frozen=True, slots=True)
+class CompleteSessionDomainV1:
+    domain_id: str
+    exchange: str
+    start: str
+    end: str
+    observations: Mapping[str, int]
+    source_id: str
+    policy_version: str
+    content_hash: str
+
+    @classmethod
+    def create(cls, *, exchange: str, start: str, end: str, observations: Mapping[str, int], source_id: str, policy_version: str):
+        first, last = date.fromisoformat(start), date.fromisoformat(end)
+        expected = []
+        cursor = first
+        while cursor <= last:
+            expected.append(cursor.isoformat())
+            cursor += timedelta(days=1)
+        frozen = MappingProxyType(dict(sorted(observations.items())))
+        if set(frozen) != set(expected) or any(value not in (0, 1) for value in frozen.values()):
+            raise ValueError("complete calendar-date domain is required")
+        body = {"schema_version": "CompleteSessionDomainV1", "exchange": exchange, "start": start, "end": end, "observations": frozen, "source_id": source_id, "policy_version": policy_version}
+        digest = content_hash(body)
+        return cls(domain_id=digest, content_hash=digest, **{key: value for key, value in body.items() if key != "schema_version"})
+
+    def observation(self, calendar_date: str) -> int | None:
+        return self.observations.get(calendar_date)
+
+
+@dataclass(frozen=True, slots=True)
+class CompositeIndependentCalendarEvidenceV1:
+    evidence_id: str
+    component_evidence_ids: tuple[str, ...]
+    preserved_evidence_ids: tuple[str, ...]
+    records: tuple[Mapping[str, Any], ...]
+    total: int
+    match_count: int
+    mismatch_count: int
+    unresolved_count: int
+    provider_error_count: int
+    policy_version: str
+    content_hash: str
+
+    @classmethod
+    def create(cls, *, frozen_sample_ids: Sequence[str], components: Sequence[IndependentCalendarComparisonEvidenceV1], policy_version: str, preserved_evidence_ids: Sequence[str] = ()):
+        expected = tuple(frozen_sample_ids)
+        if len(expected) != len(set(expected)):
+            raise ValueError("frozen sample IDs contain duplicates")
+        joined: dict[str, Mapping[str, Any]] = {}
+        for component in components:
+            for record in component.records:
+                sample_id = str(record["sample_id"])
+                if sample_id in joined:
+                    raise ValueError("duplicate or conflicting independent observations")
+                joined[sample_id] = record
+        if set(joined) != set(expected):
+            raise ValueError("composite evidence must exactly cover frozen sample IDs")
+        records = tuple(MappingProxyType(dict(joined[sample_id])) for sample_id in sorted(joined))
+        counts = {status: 0 for status in EvidenceResolution}
+        for record in records:
+            counts[EvidenceResolution(record["resolution"])] += 1
+        body = {
+            "schema_version": "CompositeIndependentCalendarEvidenceV1",
+            "component_evidence_ids": tuple(component.evidence_id for component in components),
+            "preserved_evidence_ids": tuple(sorted(set(preserved_evidence_ids))),
+            "records": records,
+            "total": len(records),
+            "match_count": counts[EvidenceResolution.MATCH],
+            "mismatch_count": counts[EvidenceResolution.MISMATCH],
+            "unresolved_count": counts[EvidenceResolution.UNRESOLVED_EVIDENCE] + counts[EvidenceResolution.OFFICIAL_REFERENCE_UNAVAILABLE],
+            "provider_error_count": counts[EvidenceResolution.PROVIDER_ERROR],
+            "policy_version": policy_version,
+        }
+        digest = content_hash(body)
+        return cls(evidence_id=digest, content_hash=digest, **{key: value for key, value in body.items() if key != "schema_version"})
 
 
 @dataclass(frozen=True, slots=True)

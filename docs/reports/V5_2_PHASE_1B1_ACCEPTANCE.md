@@ -310,6 +310,9 @@ RESULT: build=true; clean_room_dependencies=true; clean_room_install=true; clean
 COMMAND: actual credential plus sentinel scan over runtime artifact areas; git check-ignore .env; git tracked-file check for .env
 RESULT: credential/sentinel findings=0; .env ignored; .env tracked=NO
 
+COMMAND: .\.venv\Scripts\python.exe -m py_compile scripts\acquire_szse_calendar_audit.py scripts\resolve_security_master_official_sample.py scripts\evaluate_phase_1b1_upstream.py src\v5_2\data\real_audits\tier3_calendar.py src\v5_2\data\real_audits\security_master_governance.py
+RESULT: exit 0; all new Python modules compile
+
 COMMAND: git diff --check
 RESULT: exit 0; no whitespace errors
 ```
@@ -490,3 +493,106 @@ RESULT: exit 0; no whitespace errors
 The superseding result is the Tier 3 and identity-lineage re-evaluation recorded above: calendar and security master remain PENDING; V2 remains DESIGNED_NOT_ADOPTED; daily-bar entry remains locked; Phase 1B-1 remains FAIL.
 
 Current verification: focused tests 34 passed in 0.20s; full suite 193 passed in 0.99s; standalone boundary checks passed; clean-room build/install/test/wheel/smoke passed with 193 passed in 1.24s; credential/sentinel findings 0; .env ignored and untracked; git diff --check exited 0.
+
+## Upstream evidence-gap closure — final re-evaluation
+
+This is the current superseding Phase 1B-1 result. Every earlier V1, BaoStock, pending approval, quarantine, and identity-lineage artifact remains immutable and reproducible.
+
+### Second independent calendar source
+
+```text
+SECOND TIER 3 SOURCE = Shenzhen Stock Exchange official full-month calendar endpoint
+SECOND SOURCE ID = d5aa4a77620899d1e22ca0506a98797fa9f886e6512bd676d8ef5b9f7c03b5cb
+SECOND TIER 3 INDEPENDENCE = PASS
+EXACT PRIOR UNRESOLVED SZSE SAMPLE IDS = 128 / 128
+OLD BAOSTOCK EVIDENCE = 0d7de5ea50303f43d9c09ecb49fcc9a7d45077c398830af26c0e73f6305aa733 (PRESERVED)
+COMPOSITE EVIDENCE = e5e42c14be97aa1bc8d4365f729dfa7d24bebf618141bfdf77f356c3072668d6
+
+CALENDAR COMPOSITE SAMPLE:
+TOTAL = 256
+MATCH = 256
+MISMATCH = 0
+UNRESOLVED = 0
+PROVIDER_ERROR = 0
+
+CROSS SOURCE POLICY V2 = ADOPTED
+V2 ADOPTION ARTIFACT = eaf31f1f1b96c2d2ec491b2f3149ad0d5bda0761defe9170c7e93937bd861c5c
+TRADE CALENDAR APPROVAL = APPROVED_WITH_RULES
+TRADE CALENDAR APPROVAL ID = 08933ef18a3532078ade97f6f5f574216e68f04225a95d7c7838bed5ad9b840d
+```
+
+The second source is a direct exchange-operated endpoint, not DataHub, not a DataHub wrapper, and not derived from the DataHub payload. Each requested month explicitly returned every calendar date and `jybz` open/closed state. No absence or weekday inference was used. The composite joins the immutable BaoStock SSE projection and the new SZSE observations by exact frozen `sample_id` and pins the original BaoStock evidence ID.
+
+### Frozen security-master official sample
+
+```text
+SECURITY MASTER OFFICIAL SAMPLE ID = 63acd57d97c01cbdf66dd7a8315a6b515fc0bf3a43ec7052602658db32f0a015
+TOTAL = 32
+VERIFIED = 28
+MISMATCH = 1
+UNRESOLVED = 3
+
+SECURITY MASTER DISCREPANCY ID = 7f198ffb8d6440e507873c3fad6f782992afa5a1cd4c678739eca1e9db2b2b56
+MISMATCH = 600747.SH delisting_date
+DATAHUB VALUE = 2019-12-12
+SSE OFFICIAL STRUCTURED VALUE = 2019-12-13
+DISPOSITION = FAIL_CLOSED
+
+UNRESOLVED = 000535.SZ, 000606.SZ, 000760.SZ
+UNRESOLVED FIELD = board
+REASON = SZSE official terminated-company table does not supply board
+
+SECURITY MASTER QUARANTINED IDENTITIES = 1
+QUARANTINE COVERAGE OVERLAP = 0
+QUARANTINE COVERAGE RULE = 9f79f73bc079f38451c02cc1b906fda3419e4e9fab57d32ee4a6620330ae5883
+SECURITY MASTER APPROVAL = REJECTED
+SECURITY MASTER APPROVAL ID = c0506bee3879f06028a6f24025993a87cc1be8825ff76f4f6041c1818a96e74b
+```
+
+The `302132.SZ` effective-dated graph remains unchanged. The remaining `T600018.SH` interval has zero overlap with the requested 2010+ coverage, but the coverage rule deterministically rejects every pre-2010 request and every request intersecting the quarantine interval. It cannot override the official-sample mismatch or unresolved fields.
+
+### Combined upstream exit gate
+
+```text
+COMBINED UPSTREAM GATE = c8949f0a94b2a2bacd060ab6cacc43f5ce212fe98190d4f44b273646b89f369f
+DAILY BAR ENTRY UNLOCKED = NO
+DAILY BAR ACQUISITION = NOT STARTED
+
+PHASE 1B-1 = FAIL
+READY FOR PHASE 1B-2 = NO
+HISTORICAL PIT DATA = FAIL
+READY FOR LABEL ENGINE = NO
+```
+
+### Evidence acquisition and deterministic evaluation commands
+
+```text
+COMMAND: .\.venv\Scripts\python.exe scripts\acquire_szse_calendar_audit.py (executed twice after checkpoint/resume)
+RESULT: identical source/composite/adoption IDs; exact_szse_unresolved=128; total=256; match=256; mismatch=0; unresolved=0; provider_error=0; V2=ADOPTED
+
+COMMAND: .\.venv\Scripts\python.exe scripts\resolve_security_master_official_sample.py (executed twice)
+RESULT: identical inventory/discrepancy IDs; total=32; verified=28; mismatch=1; unresolved=3; discrepancy disposition=FAIL_CLOSED
+
+COMMAND: .\.venv\Scripts\python.exe scripts\evaluate_phase_1b1_upstream.py (executed twice)
+RESULT: identical approval/gate IDs; trade_calendar=APPROVED_WITH_RULES; security_master=REJECTED; quarantine overlap=0; daily_bar unlocked=NO; acquisition=NOT_STARTED
+
+COMMAND: .\.venv\Scripts\python.exe -m pytest tests\real_audits\test_composite_calendar.py tests\real_audits\test_security_master_governance.py tests\real_audits\test_tier3_calendar.py tests\real_audits\test_identity_lineage.py tests\real_audits\test_policy_adequacy.py tests\real_audits\test_blocker_evidence.py tests\real_audits\test_security_master_normalization.py tests\real_audits\test_dataset_validators.py tests\data\test_manifests.py tests\data\test_source_approval.py -q
+RESULT: 60 passed in 0.26s
+
+COMMAND: .\.venv\Scripts\python.exe -m pytest -q
+RESULT: 206 passed in 1.02s
+```
+
+```text
+COMMAND: .\.venv\Scripts\python.exe scripts\verify_standalone.py
+RESULT: forbidden imports=0; forbidden active paths/dependencies=0; prohibited repository inventory=0; phase 1a architecture boundary violations=0
+
+COMMAND: .\.venv\Scripts\python.exe scripts\clean_room_acceptance.py
+RESULT: build=true; clean_room_dependencies=true; clean_room_install=true; clean_room_tests=true; wheel_install=true; wheel_smoke=true; zero_dependency_acceptance=true; clean-room test output="206 passed in 1.32s"
+
+COMMAND: actual credential plus sentinel scan over runtime artifact areas; git check-ignore .env; git tracked-file check for .env
+RESULT: credential/sentinel findings=0; .env ignored; .env tracked=NO
+
+COMMAND: git diff --check
+RESULT: exit 0; no whitespace errors
+```
