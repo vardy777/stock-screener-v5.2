@@ -51,6 +51,8 @@ class TushareClient:
             )
         except Exception:
             raise ProviderContractError("provider transport failed") from None
+        if credential.is_exposed_in(response):
+            raise ProviderContractError("provider response failed credential safety check")
         if response.get("code") != 0:
             raise ProviderContractError("provider rejected request")
         rows = response.get("rows")

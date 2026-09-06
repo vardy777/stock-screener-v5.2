@@ -44,3 +44,15 @@ def test_normalization_io_import_is_detected(tmp_path: Path) -> None:
 
 def test_current_repository_passes_phase_1a_boundaries() -> None:
     assert verifier.scan_phase1a_boundaries(ROOT) == []
+
+
+def test_sentinel_scan_detects_secret_in_runtime_artifact(tmp_path: Path) -> None:
+    artifact = tmp_path / "data" / "raw" / "page.json"
+    artifact.parent.mkdir(parents=True)
+    artifact.write_text('{"token":"V52_TEST_SECRET"}', encoding="utf-8")
+    findings = verifier.scan_secret_leaks(tmp_path, ("V52_TEST_SECRET",))
+    assert findings == ["data\\raw\\page.json: sentinel secret leak"]
+
+
+def test_current_runtime_areas_have_no_sentinel_leak() -> None:
+    assert verifier.scan_secret_leaks(ROOT, ("SENTINEL_TUSHARE_SECRET",)) == []

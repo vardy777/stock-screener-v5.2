@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Mapping
+from collections.abc import Sequence
 from pathlib import Path
 
 
@@ -26,6 +27,18 @@ class Credential:
     def reveal_for_transport(self) -> str:
         """Reveal only at the injected transport call boundary."""
         return self.__value
+
+    def is_exposed_in(self, value: object) -> bool:
+        if isinstance(value, str):
+            return self.__value in value
+        if isinstance(value, Mapping):
+            return any(
+                self.is_exposed_in(key) or self.is_exposed_in(nested)
+                for key, nested in value.items()
+            )
+        if isinstance(value, Sequence) and not isinstance(value, (bytes, bytearray)):
+            return any(self.is_exposed_in(nested) for nested in value)
+        return False
 
 
 def _read_env_file(path: Path) -> dict[str, str]:

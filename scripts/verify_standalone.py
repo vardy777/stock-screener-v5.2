@@ -105,6 +105,21 @@ def scan_phase1a_boundaries(root: Path) -> list[str]:
     return findings
 
 
+def scan_secret_leaks(root: Path, sentinels: tuple[str, ...]) -> list[str]:
+    active_sentinels = tuple(value for value in sentinels if value)
+    if not active_sentinels:
+        return []
+    findings: list[str] = []
+    for path in _files(root, ("data", "logs", "artifacts", "build", "dist")):
+        try:
+            content = path.read_bytes()
+        except OSError:
+            continue
+        if any(value.encode("utf-8") in content for value in active_sentinels):
+            findings.append(f"{path.relative_to(root)}: sentinel secret leak")
+    return sorted(findings)
+
+
 def scan_active_paths(root: Path) -> list[str]:
     old_absolute = "c:" + chr(92) + "users" + chr(92) + "lisha" + chr(92) + "stock-screener"
     patterns = {

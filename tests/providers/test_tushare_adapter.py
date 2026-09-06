@@ -59,3 +59,18 @@ def test_provider_error_does_not_expose_credential() -> None:
     with pytest.raises(ProviderContractError) as caught:
         client.fetch_page(request(), credential, page_identity={"offset": 0})
     assert "sentinel" not in str(caught.value)
+
+
+def test_provider_payload_echoing_credential_is_rejected_before_persistence() -> None:
+    client = TushareClient(
+        transport=lambda *_: {
+            "code": 0,
+            "message": "ok",
+            "rows": [{"unexpected": "sentinel"}],
+        },
+        endpoint_registry={"daily_bar": "daily"},
+    )
+    credential = load_tushare_credential(env={"TUSHARE_TOKEN": "sentinel"})
+    with pytest.raises(ProviderContractError) as caught:
+        client.fetch_page(request(), credential, page_identity={"offset": 0})
+    assert "sentinel" not in str(caught.value)
