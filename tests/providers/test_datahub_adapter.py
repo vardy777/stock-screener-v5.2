@@ -6,6 +6,7 @@ from v5_2.providers.contracts import HistoricalProviderClient, ProviderRequestV1
 from v5_2.providers.credentials import load_datahub_credential
 from v5_2.providers.datahub import DATAHUB_ENDPOINTS, DataHubClient
 from v5_2.providers.tushare import ProviderContractError
+from v5_2.providers.retry import TransientProviderError
 
 
 def request(dataset_kind: str = "daily_bar", endpoint: str = "daily") -> ProviderRequestV1:
@@ -99,3 +100,13 @@ def test_provider_error_and_credential_echo_are_sanitized() -> None:
         with pytest.raises(ProviderContractError) as caught:
             client.fetch_page(request(), credential(), page_identity={"offset": 0})
         assert "sentinel" not in str(caught.value)
+
+
+def test_sanitized_transient_transport_failure_remains_retryable() -> None:
+    def transport(*_):
+        raise TransientProviderError("temporary")
+
+    with pytest.raises(TransientProviderError, match="temporary"):
+        DataHubClient(transport=transport).fetch_page(
+            request(), credential(), page_identity={"offset": 0}
+        )

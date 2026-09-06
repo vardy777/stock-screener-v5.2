@@ -84,6 +84,47 @@ def test_explicit_has_more_prevents_extra_terminal_request(tmp_path: Path) -> No
     assert client.offsets == [0]
 
 
+def test_repeated_full_page_at_new_offset_fails_closed(tmp_path: Path) -> None:
+    class RepeatingClient:
+        def fetch_page(self, req, credential, *, page_identity):
+            return ProviderPageV1(
+                request_id=req.request_id,
+                page_identity=page_identity,
+                response_code=0,
+                response_status="ok",
+                rows=({"id": 0}, {"id": 1}),
+                has_more=page_identity["offset"] < 2,
+                total_count=0,
+            )
+
+    with pytest.raises(AcquisitionError, match="repeated page"):
+        acquire_pages(
+            request=request(), client=RepeatingClient(),
+            credential=load_tushare_credential(env={"TUSHARE_TOKEN": "sentinel"}),
+            raw_store=RawArtifactStore(tmp_path), checkpoint_store=CheckpointStore(tmp_path),
+            acquisition_policy_version="acquisition-v1", controls=controls(),
+        )
+
+
+def test_nonzero_provider_count_must_match_terminal_row_total(tmp_path: Path) -> None:
+    class WrongCountClient(FakeClient):
+        def fetch_page(self, req, credential, *, page_identity):
+            page = super().fetch_page(req, credential, page_identity=page_identity)
+            return ProviderPageV1(
+                request_id=page.request_id, page_identity=page.page_identity,
+                response_code=0, response_status="ok", rows=page.rows,
+                has_more=False, total_count=99,
+            )
+
+    with pytest.raises(AcquisitionError, match="count"):
+        acquire_pages(
+            request=request(), client=WrongCountClient([{"id": 0}]),
+            credential=load_tushare_credential(env={"TUSHARE_TOKEN": "sentinel"}),
+            raw_store=RawArtifactStore(tmp_path), checkpoint_store=CheckpointStore(tmp_path),
+            acquisition_policy_version="acquisition-v1", controls=controls(),
+        )
+
+
 def test_pagination_stops_on_short_page_and_checkpoints_each_page(tmp_path: Path) -> None:
     client = FakeClient([{"id": value} for value in range(5)])
     artifacts = acquire_pages(

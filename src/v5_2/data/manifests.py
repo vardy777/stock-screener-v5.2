@@ -33,6 +33,10 @@ class DatasetManifestV1:
     pit_validation_status: str
     rule_compliance_status: str
     pagination_complete: bool
+    equivalence_evidence_id: str | None
+    audit_policy_id: str | None
+    endpoint_identities: tuple[str, ...]
+    receipt_hashes: tuple[str, ...]
     manifest_hash: str
 
     @classmethod
@@ -57,6 +61,9 @@ class DatasetManifestV1:
         pit_validation_status: str,
         rule_compliance_status: str,
         pagination_complete: bool,
+        audit_policy_id: str | None = None,
+        endpoint_identities: tuple[str, ...] = (),
+        receipt_hashes: tuple[str, ...] = (),
     ) -> DatasetManifestV1:
         approving = {ApprovalDecision.APPROVED, ApprovalDecision.APPROVED_WITH_RULES}
         if approval.decision not in approving:
@@ -78,6 +85,13 @@ class DatasetManifestV1:
             raise ManifestError("dataset counts are invalid")
         if not raw_payload_hashes or not normalized_content_hashes or not fact_content_hashes:
             raise ManifestError("dataset lineage hashes must not be empty")
+        if source_name == "datahubco_tushare_proxy" and (
+            not approval.equivalence_evidence_id
+            or not audit_policy_id
+            or not endpoint_identities
+            or not receipt_hashes
+        ):
+            raise ManifestError("DataHub manifest requires extended lineage")
         for name, value in (
             ("created_at", created_at),
             ("approval_resolution_as_of", approval_resolution_as_of),
@@ -105,6 +119,10 @@ class DatasetManifestV1:
             "pit_validation_status": pit_validation_status,
             "rule_compliance_status": rule_compliance_status,
             "pagination_complete": pagination_complete,
+            "equivalence_evidence_id": approval.equivalence_evidence_id,
+            "audit_policy_id": audit_policy_id,
+            "endpoint_identities": tuple(sorted(set(endpoint_identities))),
+            "receipt_hashes": tuple(sorted(set(receipt_hashes))),
         }
         digest = content_hash(body)
         values = dict(body)

@@ -10,10 +10,13 @@ def test_request_inventory_is_independent_and_scope_limited() -> None:
         ("trade-cal", "SSE"),
         ("trade-cal", "SZSE"),
     ]
-    assert [(r.endpoint, r.parameters.get("list_status")) for r in requests["security_master"]] == [
-        ("stock-basic", "L"),
-        ("stock-basic", "D"),
-        ("stock-basic", "P"),
+    assert [(r.parameters.get("exchange"), r.parameters.get("list_status")) for r in requests["security_master"]] == [
+        ("SSE", "L"),
+        ("SSE", "D"),
+        ("SSE", "P"),
+        ("SZSE", "L"),
+        ("SZSE", "D"),
+        ("SZSE", "P"),
     ]
     assert requests["daily_bar"] == ()
 

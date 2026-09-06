@@ -17,6 +17,7 @@ from v5_2.data.source_approval import (
     ApprovalEvaluationError,
     SourceApprovalArtifactV1,
 )
+from v5_2.data.dataset_equivalence import DatasetEquivalenceDecision, DatasetEquivalenceEvidenceV1
 
 
 NOW = datetime(2026, 1, 10, tzinfo=timezone.utc)
@@ -126,3 +127,33 @@ def test_stale_evidence_fails_closed_to_pending() -> None:
         for kind in REQUIRED
     )
     assert approval(items).decision is ApprovalDecision.PENDING
+
+
+def test_datahub_approval_requires_dataset_equivalence_evidence() -> None:
+    kwargs = dict(
+        source_name="datahubco_tushare_proxy", dataset_kind="trade_calendar",
+        coverage_start=date(2020, 1, 1), coverage_end=date(2020, 12, 31),
+        verified_at=NOW, source_version_identity="synthetic-provider-v1",
+        policy_version="approval-v1", evaluator_version="evaluator-v1",
+        evidence=tuple(evidence(kind) for kind in REQUIRED),
+        required_evidence_types=REQUIRED, rule_set={},
+        evidence_validity_policy=validity_policy(), resolution_as_of=NOW,
+    )
+    missing = SourceApprovalArtifactV1.evaluate(**kwargs)
+    assert missing.decision is ApprovalDecision.PENDING
+    assert missing.equivalence_evidence_id is None
+
+    equivalence = DatasetEquivalenceEvidenceV1.create(
+        source_name="datahubco_tushare_proxy", dataset_kind="trade_calendar",
+        reference_contract="contract-v1", tested_endpoints=("trade-cal",),
+        tested_fields=("cal_date",), coverage_tested={"start": "2020-01-01"},
+        sample_rule={"method": "sha256"}, field_mapping={"cal_date": "calendar_date"},
+        semantic_findings=(), missing_fields=(), extra_fields=(),
+        value_comparison_summary={"matched": 1}, pit_findings=(), revision_findings=(),
+        pagination_findings=(), cross_source_findings=(), limitations=(),
+        decision=DatasetEquivalenceDecision.EQUIVALENT, verified_at=NOW,
+        input_artifact_ids=("input",), policy_version="equivalence-v1",
+    )
+    approved = SourceApprovalArtifactV1.evaluate(**kwargs, equivalence_evidence=equivalence)
+    assert approved.decision is ApprovalDecision.APPROVED
+    assert approved.equivalence_evidence_id == equivalence.evidence_id

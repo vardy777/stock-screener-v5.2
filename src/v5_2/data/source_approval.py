@@ -15,6 +15,10 @@ from v5_2.data.evidence import (
     EvidenceValidityStatus,
 )
 from v5_2.data.identity import canonical_json, content_hash
+from v5_2.data.dataset_equivalence import (
+    DatasetEquivalenceDecision,
+    DatasetEquivalenceEvidenceV1,
+)
 
 
 class ApprovalEvaluationError(RuntimeError):
@@ -48,6 +52,7 @@ class SourceApprovalArtifactV1:
     evidence_bundle_hash: str
     evaluator_version: str
     evidence_validity_policy_version: str
+    equivalence_evidence_id: str | None
     supersedes_approval_id: str | None
     content_hash: str
 
@@ -68,6 +73,7 @@ class SourceApprovalArtifactV1:
         rule_set: Mapping[str, Any],
         evidence_validity_policy: EvidenceValidityPolicy,
         resolution_as_of: datetime,
+        equivalence_evidence: DatasetEquivalenceEvidenceV1 | None = None,
         supersedes_approval_id: str | None = None,
     ) -> SourceApprovalArtifactV1:
         if coverage_end < coverage_start:
@@ -90,20 +96,46 @@ class SourceApprovalArtifactV1:
             )
             for item in selected
         )
-        if any(item.status is EvidenceStatus.FAIL for item in selected):
+        equivalence_required = source_name == "datahubco_tushare_proxy"
+        if equivalence_evidence is not None and (
+            equivalence_evidence.source_name != source_name
+            or equivalence_evidence.dataset_kind != dataset_kind
+            or equivalence_evidence.verified_at > resolution_as_of
+        ):
+            raise ApprovalEvaluationError("equivalence evidence scope mismatch")
+        if any(item.status is EvidenceStatus.FAIL for item in selected) or (
+            equivalence_evidence is not None
+            and equivalence_evidence.decision is DatasetEquivalenceDecision.NOT_EQUIVALENT
+        ):
             decision = ApprovalDecision.REJECTED
-        elif set(by_type) < required or any(
+        elif (
+            (equivalence_required and equivalence_evidence is None)
+            or (
+                equivalence_evidence is not None
+                and equivalence_evidence.decision
+                is DatasetEquivalenceDecision.INSUFFICIENT_EVIDENCE
+            )
+            or set(by_type) < required
+            or any(
             result.status is EvidenceValidityStatus.STALE for result in validity
+            )
         ):
             decision = ApprovalDecision.PENDING
         else:
-            has_rules = any(value not in (None, False, "", (), [], {}) for value in rule_set.values())
+            has_rules = any(value not in (None, False, "", (), [], {}) for value in rule_set.values()) or (
+                equivalence_evidence is not None
+                and equivalence_evidence.decision
+                is DatasetEquivalenceDecision.EQUIVALENT_WITH_RULES
+            )
             decision = (
                 ApprovalDecision.APPROVED_WITH_RULES
                 if has_rules
                 else ApprovalDecision.APPROVED
             )
-        evidence_ids = tuple(sorted(item.evidence_id for item in selected))
+        evidence_ids = tuple(sorted(
+            [item.evidence_id for item in selected]
+            + ([equivalence_evidence.evidence_id] if equivalence_evidence else [])
+        ))
         bundle_hash = content_hash(evidence_ids)
         canonical_rules = json.loads(canonical_json(rule_set).decode("utf-8"))
         body = {
@@ -121,6 +153,9 @@ class SourceApprovalArtifactV1:
             "evidence_bundle_hash": bundle_hash,
             "evaluator_version": evaluator_version,
             "evidence_validity_policy_version": evidence_validity_policy.policy_version,
+            "equivalence_evidence_id": (
+                equivalence_evidence.evidence_id if equivalence_evidence else None
+            ),
             "supersedes_approval_id": supersedes_approval_id,
         }
         digest = content_hash(body)
@@ -140,6 +175,9 @@ class SourceApprovalArtifactV1:
             evidence_bundle_hash=bundle_hash,
             evaluator_version=evaluator_version,
             evidence_validity_policy_version=evidence_validity_policy.policy_version,
+            equivalence_evidence_id=(
+                equivalence_evidence.evidence_id if equivalence_evidence else None
+            ),
             supersedes_approval_id=supersedes_approval_id,
         )
 

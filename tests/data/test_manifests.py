@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date, datetime, timezone
 
 import pytest
@@ -93,6 +94,23 @@ def test_manifest_pins_exact_approval_and_resolution_time() -> None:
     assert result.approval_id == selected.approval_id
     assert result.approval_resolution_as_of == NOW
     assert result.verify_pinned_approval(selected) is True
+
+
+def test_datahub_manifest_requires_extended_equivalence_and_transport_lineage() -> None:
+    selected = replace(
+        approval(), source_name="datahubco_tushare_proxy", dataset_kind="trade_calendar",
+        equivalence_evidence_id="equivalence-id",
+    )
+    with pytest.raises(ManifestError, match="extended lineage"):
+        DatasetManifestV1.create(
+            created_at=NOW, source_name="datahubco_tushare_proxy", dataset_kind="trade_calendar",
+            approval=selected, approval_resolution_as_of=NOW,
+            coverage_start=date(2020, 1, 1), coverage_end=date(2020, 12, 31),
+            row_count=1, symbol_count=0, raw_payload_hashes=("a" * 64,),
+            normalized_content_hashes=("b" * 64,), fact_content_hashes=("c" * 64,),
+            normalizer_version="v1", availability_policy_version="v1", quality_findings=(),
+            pit_validation_status="PASS", rule_compliance_status="PASS", pagination_complete=True,
+        )
 
 
 def test_future_revocation_does_not_change_old_manifest_identity() -> None:

@@ -7,6 +7,7 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from v5_2.providers.datahub import DATAHUB_ENDPOINTS
+from v5_2.providers.retry import TransientProviderError
 
 
 BASE_URL = "http://datahubco.com/app-api/openapi/v1/tushare"
@@ -14,6 +15,10 @@ BASE_URL = "http://datahubco.com/app-api/openapi/v1/tushare"
 
 class TransportError(RuntimeError):
     """Sanitized external transport failure."""
+
+
+class TransientTransportError(TransportError, TransientProviderError):
+    """Sanitized external failure eligible for bounded retry."""
 
 
 class DataHubHttpTransport:
@@ -53,7 +58,7 @@ class DataHubHttpTransport:
         except json.JSONDecodeError:
             raise TransportError("provider returned invalid JSON") from None
         except Exception:
-            raise TransportError("provider HTTP request failed") from None
+            raise TransientTransportError("provider HTTP request failed") from None
         if not isinstance(payload, Mapping):
             raise TransportError("provider returned invalid JSON object")
         return dict(payload)

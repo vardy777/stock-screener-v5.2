@@ -46,9 +46,10 @@ def phase_1b1_requests():
         _request(
             "security_master",
             "stock-basic",
-            {"list_status": status, "fields": ",".join(master_fields)},
+            {"exchange": exchange, "list_status": status, "fields": ",".join(master_fields)},
             master_fields,
         )
+        for exchange in ("SSE", "SZSE")
         for status in ("L", "D", "P")
     )
     return MappingProxyType(

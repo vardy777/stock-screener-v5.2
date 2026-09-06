@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Protocol
 
 from v5_2.data.checkpoints import CheckpointStore, CheckpointV1
+from v5_2.data.identity import content_hash
 from v5_2.data.raw_artifacts import (
     AcquisitionReceiptV1,
     RawArtifactError,
@@ -74,6 +75,8 @@ def acquire_pages(
         offset = 0
         accepted = []
     produced: list[RawPayloadArtifactV1] = []
+    observed_page_content: set[str] = set()
+    declared_total_count: int | None = None
     while True:
         expected_identity = {"offset": offset}
         controls.rate_limiter.acquire(controls.monotonic_clock, controls.sleeper)
@@ -85,6 +88,14 @@ def acquire_pages(
         )
         if page.request_id != request.request_id or page.page_identity != expected_identity:
             raise AcquisitionError("provider page identity did not match request")
+        page_content_hash = content_hash(page.rows)
+        if page.rows and page_content_hash in observed_page_content:
+            raise AcquisitionError("provider returned repeated page content")
+        observed_page_content.add(page_content_hash)
+        if page.total_count not in (None, 0):
+            if declared_total_count is not None and page.total_count != declared_total_count:
+                raise AcquisitionError("provider count changed across pages")
+            declared_total_count = page.total_count
         artifact = RawPayloadArtifactV1.create(
             request_id=request.request_id,
             page_identity=expected_identity,
@@ -121,9 +132,12 @@ def acquire_pages(
                 acquisition_policy_version=acquisition_policy_version,
             )
         )
-        if page.has_more is False or (
+        terminal = page.has_more is False or (
             page.has_more is None and row_count < request.page_size
-        ):
+        )
+        if terminal and declared_total_count is not None and next_offset != declared_total_count:
+            raise AcquisitionError("provider count did not match acquired rows")
+        if terminal:
             break
         if page.has_more is True and row_count == 0:
             raise AcquisitionError("provider reported more pages without rows")

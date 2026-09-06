@@ -7,6 +7,7 @@ from typing import Any
 from v5_2.providers.contracts import ProviderRequestV1
 from v5_2.providers.credentials import Credential
 from v5_2.providers.tushare import ProviderContractError, ProviderPageV1
+from v5_2.providers.retry import TransientProviderError
 
 
 DATAHUB_ENDPOINTS = MappingProxyType(
@@ -45,6 +46,8 @@ class DataHubClient:
             response = self._transport(
                 request.endpoint, credential.reveal_for_transport(), parameters
             )
+        except TransientProviderError:
+            raise
         except Exception:
             raise ProviderContractError("provider transport failed") from None
         if credential.is_exposed_in(response):
