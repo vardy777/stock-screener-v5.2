@@ -32,14 +32,11 @@ def _mapping(item):
     return {field.name: getattr(item, field.name) for field in fields(item)}
 
 
-def main() -> int:
-    audit_path, audit = _latest("status-audit")
-    classification_path, classification = _latest("missing-bar-classification")
-    replay_path, replay = _latest("status-replay")
-    raw_hashes = tuple(audit["raw_payload_hashes"])
-    source_version = content_hash(raw_hashes)
+def build_status_equivalence(*, classification, audit, replay, raw_hashes):
+    counts = dict(classification["counts"])
+    unexplained = int(counts.get("UNEXPLAINED", 0))
     inputs = tuple(sorted((audit["evidence_id"], classification["content_hash"], replay["evidence_id"])))
-    equivalence = DatasetEquivalenceEvidenceV1.create(
+    return DatasetEquivalenceEvidenceV1.create(
         source_name="datahubco_tushare_proxy", dataset_kind="daily_security_status",
         reference_contract="V5.2 Phase 1B-2A PIT daily security status v1",
         tested_endpoints=("namechange", "suspend-d"),
@@ -55,10 +52,23 @@ def main() -> int:
         revision_findings=("first-middle-last real replay stable",),
         pagination_findings=("32 terminal requests", "116 pages", "473424 rows"),
         cross_source_findings=tuple(audit["cross_source_findings"]),
-        limitations=("plaintext provider transport", "survivorship audit failed", "88 missing bars unexplained"),
+        limitations=("plaintext provider transport", "survivorship audit failed",
+                     f"{unexplained} missing bars unexplained"),
         decision=DatasetEquivalenceDecision.INSUFFICIENT_EVIDENCE,
         verified_at=NOW, input_artifact_ids=inputs,
         policy_version="phase-1b2a-status-equivalence-v1",
+    )
+
+
+def main() -> int:
+    audit_path, audit = _latest("status-audit")
+    classification_path, classification = _latest("missing-bar-classification")
+    replay_path, replay = _latest("status-replay")
+    raw_hashes = tuple(audit["raw_payload_hashes"])
+    source_version = content_hash(raw_hashes)
+    inputs = tuple(sorted((audit["evidence_id"], classification["content_hash"], replay["evidence_id"])))
+    equivalence = build_status_equivalence(
+        classification=classification, audit=audit, replay=replay, raw_hashes=raw_hashes
     )
     evidence = []
     statuses = {

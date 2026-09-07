@@ -4,6 +4,17 @@ import pytest
 
 from v5_2.data.manifests import DatasetManifestV1, ManifestError
 from v5_2.data.source_approval import ApprovalDecision, SourceApprovalArtifactV1
+from scripts.publish_phase_1b2a_status import build_status_equivalence
+
+
+def test_equivalence_unexplained_count_comes_from_classification() -> None:
+    equivalence = build_status_equivalence(
+        classification={"counts": [["SUSPENDED", 40], ["UNEXPLAINED", 7]], "content_hash": "c"},
+        audit={"sample_inventory_id": "sample", "pit_findings": ["pit"],
+               "cross_source_findings": ["cross"], "evidence_id": "audit"},
+        replay={"evidence_id": "replay"}, raw_hashes=("raw",),
+    )
+    assert "7 missing bars unexplained" in equivalence.limitations
 
 
 def test_rejected_status_approval_cannot_publish_manifest() -> None:
