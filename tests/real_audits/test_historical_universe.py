@@ -19,3 +19,19 @@ def test_reconciliation_classifies_target_non_target_outside_and_alias() -> None
     assert result.supplement.identities[0].security_identity == "600747.SH"
     assert result.supplement.original_universe_id == "u"
     assert result.supplement.content_hash
+
+
+def test_evidence_backed_resolution_override_records_interval_and_research_impact() -> None:
+    result = reconcile_historical_universe(
+        observed_symbols=("430017.BJ",), original_symbols=(), master_rows={}, aliases={},
+        coverage_start="20100104", coverage_end="20251231", original_universe_id="u",
+        official_evidence={}, resolution_overrides={"430017.BJ": {
+            "category": "NON_TARGET", "effective_from": "20211115", "effective_to": None,
+            "evidence_ids": ("bse-identity-430017",),
+            "research_scope_impact": "BSE excluded from SSE/SZSE A-share scope",
+        }},
+    )
+    item = result.items[0]
+    assert item.category == "NON_TARGET"
+    assert item.evidence_ids == ("bse-identity-430017",)
+    assert item.research_scope_impact.startswith("BSE excluded")

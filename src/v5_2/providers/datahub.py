@@ -17,6 +17,8 @@ DATAHUB_ENDPOINTS = MappingProxyType(
         "daily_bar": "daily",
         "risk_warning_history": "namechange",
         "suspension_history": "suspend-d",
+        "risk_warning_daily": "stock-st",
+        "risk_warning_events": "st",
     }
 )
 

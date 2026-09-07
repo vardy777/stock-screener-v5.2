@@ -29,9 +29,31 @@ def main() -> int:
         for row in load(path)["provider_payload"]["rows"]:
             master[row["ts_code"]] = row
     observed = set()
+    observations = {}
     for kind in ("risk_warning_history", "suspension_history"):
         for path in (P2 / "raw" / "datahubco_tushare_proxy" / kind).rglob("*.json"):
-            observed.update(row["ts_code"] for row in load(path)["provider_payload"]["rows"])
+            artifact = load(path)
+            for row in artifact["provider_payload"]["rows"]:
+                symbol = row["ts_code"]
+                observed.add(symbol)
+                event_date = row.get("trade_date") or row.get("start_date") or row.get("ann_date")
+                slot = observations.setdefault(symbol, {"dates": [], "evidence": set()})
+                if event_date:
+                    slot["dates"].append(event_date)
+                slot["evidence"].add(artifact["payload_hash"])
+    overrides = {}
+    for symbol in observed:
+        if symbol.endswith(".BJ") or symbol.startswith("X"):
+            slot = observations[symbol]
+            overrides[symbol] = {
+                "category": "NON_TARGET" if symbol.endswith(".BJ") else "LEGACY_CODE",
+                "effective_from": min(slot["dates"]) if slot["dates"] else None,
+                "effective_to": max(slot["dates"]) if slot["dates"] else None,
+                "evidence_ids": tuple(sorted(slot["evidence"])),
+                "research_scope_impact": ("BSE identity excluded from frozen SSE/SZSE A-share research scope"
+                                          if symbol.endswith(".BJ") else
+                                          "non-canonical temporary exchange identity excluded from target A-share universe"),
+            }
     result = reconcile_historical_universe(
         observed_symbols=tuple(observed), original_symbols=tuple(universe["ordered_symbols"]),
         master_rows=master, aliases={"302132.SZ": "300114.SZ"},
@@ -39,6 +61,7 @@ def main() -> int:
         official_evidence={
             "600747.SH": ("https://www.sse.com.cn/aboutus/mediacenter/hotandd/c/c_20191018_4929400.shtml",),
         },
+        resolution_overrides=overrides,
     )
     body = asdict(result)
     body["schema_version"] = "HistoricalUniverseReconciliationV1"

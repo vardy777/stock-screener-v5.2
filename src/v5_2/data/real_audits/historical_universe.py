@@ -15,6 +15,8 @@ class HistoricalUniverseReconciliationItemV1:
     category: str
     effective_from: str | None
     effective_to: str | None
+    evidence_ids: tuple[str, ...]
+    research_scope_impact: str
     item_hash: str
 
 
@@ -47,7 +49,8 @@ class HistoricalUniverseReconciliationV1:
 
 def reconcile_historical_universe(*, observed_symbols, original_symbols, master_rows, aliases,
                                   coverage_start, coverage_end, original_universe_id,
-                                  official_evidence):
+                                  official_evidence, resolution_overrides=None):
+    resolution_overrides = resolution_overrides or {}
     originals = set(original_symbols)
     items = []
     supplements = []
@@ -56,7 +59,19 @@ def reconcile_historical_universe(*, observed_symbols, original_symbols, master_
         row = master_rows.get(symbol)
         start = None if row is None else row.get("list_date")
         end = None if row is None else row.get("delist_date")
-        if symbol in aliases and aliases[symbol] in originals:
+        override = resolution_overrides.get(symbol)
+        if override:
+            category = str(override["category"])
+            if category not in {"TARGET_A_SHARE_REQUIRED", "NON_TARGET", "OUTSIDE_RESEARCH_COVERAGE",
+                                "IDENTITY_ALIAS", "EFFECTIVE_IDENTITY_ALREADY_PRESENT", "LEGACY_CODE",
+                                "LOCAL_EXCEPTION", "UNRESOLVED"}:
+                raise ValueError("invalid historical universe disposition")
+            start, end = override.get("effective_from"), override.get("effective_to")
+            evidence_ids = tuple(sorted(set(override.get("evidence_ids", ()))))
+            impact = str(override.get("research_scope_impact", ""))
+            if category != "UNRESOLVED" and (not evidence_ids or not impact):
+                raise ValueError("resolved identity requires evidence and research scope impact")
+        elif symbol in aliases and aliases[symbol] in originals:
             category = "IDENTITY_ALIAS"
         elif row is None:
             category = "UNRESOLVED"
@@ -69,12 +84,16 @@ def reconcile_historical_universe(*, observed_symbols, original_symbols, master_
                 category = "OUTSIDE_RESEARCH_COVERAGE"
             else:
                 category = "TARGET_A_SHARE_REQUIRED"
+        if not override:
+            evidence_ids = tuple(sorted(set(official_evidence.get(symbol, ()))))
+            impact = "requires inclusion" if category == "TARGET_A_SHARE_REQUIRED" else "classified by frozen master and scope"
         body = {"schema_version": "HistoricalUniverseReconciliationItemV1",
                 "security_identity": symbol, "category": category,
-                "effective_from": start, "effective_to": end}
-        items.append(HistoricalUniverseReconciliationItemV1(symbol, category, start, end, content_hash(body)))
+                "effective_from": start, "effective_to": end, "evidence_ids": evidence_ids,
+                "research_scope_impact": impact}
+        items.append(HistoricalUniverseReconciliationItemV1(symbol, category, start, end, evidence_ids, impact, content_hash(body)))
         counts[category] = counts.get(category, 0) + 1
-        evidence = tuple(sorted(set(official_evidence.get(symbol, ()))))
+        evidence = evidence_ids
         if category == "TARGET_A_SHARE_REQUIRED" and evidence and start:
             supplement_body = {"schema_version": "HistoricalUniverseSupplementIdentityV1",
                                "security_identity": symbol, "effective_from": start,
