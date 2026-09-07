@@ -42,13 +42,16 @@ def classify_missing_bar_keys(
     if expected_total is not None and len(keys) != expected_total:
         raise ValueError(f"missing-key total must equal {expected_total}")
     items = []
-    counts = {}
+    counts = {category: 0 for category in (
+        "SUSPENDED", "NOT_YET_LISTED", "DELISTED", "IDENTITY_NOT_APPLICABLE",
+        "OTHER_LEGITIMATE", "LOCAL_EXCEPTION", "UNEXPLAINED",
+    )}
     for identity, session in keys:
         key = identity, session
         if key in full_day_suspensions:
-            category = "FULL_DAY_SUSPENSION"
+            category = "SUSPENDED"
         elif key in partial_suspensions or key in resume_observations:
-            category = "PARTIAL_SUSPENSION_CONTRADICTION"
+            category = "UNEXPLAINED"
         elif key in local_exception_keys:
             category = "LOCAL_EXCEPTION"
         else:

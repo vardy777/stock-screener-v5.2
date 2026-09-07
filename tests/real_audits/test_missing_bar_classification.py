@@ -10,9 +10,9 @@ def test_classification_is_total_exclusive_and_uses_frozen_precedence() -> None:
     )
     assert result.total == 3
     assert dict(result.counts) == {
-        "FULL_DAY_SUSPENSION": 1,
-        "PARTIAL_SUSPENSION_CONTRADICTION": 1,
-        "UNEXPLAINED": 1,
+        "DELISTED": 0, "IDENTITY_NOT_APPLICABLE": 0, "LOCAL_EXCEPTION": 0,
+        "NOT_YET_LISTED": 0, "OTHER_LEGITIMATE": 0, "SUSPENDED": 1,
+        "UNEXPLAINED": 2,
     }
     assert len({item.key for item in result.items}) == 3
 
