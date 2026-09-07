@@ -25,11 +25,13 @@ def credential():
     return load_datahub_credential(env={"DATAHUB_API_KEY": "sentinel"})
 
 
-def test_datahub_endpoint_registry_is_phase_1b1_only() -> None:
+def test_datahub_endpoint_registry_is_dataset_scoped() -> None:
     assert DATAHUB_ENDPOINTS == {
         "trade_calendar": "trade-cal",
         "security_master": "stock-basic",
         "daily_bar": "daily",
+        "risk_warning_history": "namechange",
+        "suspension_history": "suspend-d",
     }
 
 
