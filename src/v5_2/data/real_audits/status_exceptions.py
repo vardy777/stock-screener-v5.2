@@ -89,3 +89,86 @@ class StatusExceptionPatternAuditV1:
         values = {"systematic_dataset_defect": bool(repeated), "repeated_signatures": repeated}
         digest = content_hash({"schema_version": "StatusExceptionPatternAuditV1", **values})
         return cls(audit_id=digest, content_hash=digest, **values)
+
+
+@dataclass(frozen=True, slots=True)
+class StatusExceptionBudgetResultV2:
+    passed: bool
+    systematic_pattern: bool
+    reasons: tuple[str, ...]
+    metrics: object
+
+
+@dataclass(frozen=True, slots=True)
+class StatusExceptionBudgetV2:
+    absolute_limit: int
+    ratio_limit: Decimal
+    per_security_limit: int
+    per_security_consecutive_limit: int
+    exchange_concentration_limit: Decimal
+    month_concentration_limit: int
+    unknown_effective_interval_limit: int
+    policy_version: str
+    budget_id: str
+
+    @classmethod
+    def default(cls):
+        values = {
+            "absolute_limit": 250, "ratio_limit": Decimal("0.0001"),
+            "per_security_limit": 20, "per_security_consecutive_limit": 10,
+            "exchange_concentration_limit": Decimal("0.75"),
+            "month_concentration_limit": 25, "unknown_effective_interval_limit": 0,
+            "policy_version": "status-exception-budget-v2",
+        }
+        identity = {key: str(value) if isinstance(value, Decimal) else value for key, value in values.items()}
+        return cls(**values, budget_id=content_hash({"schema_version": "StatusExceptionBudgetV2", **identity}))
+
+    def evaluate_records(self, records, *, applicable_symbol_sessions):
+        records = tuple(records)
+        by_security = Counter(str(item["security_identity"]) for item in records)
+        by_exchange = Counter(str(item["exchange"]) for item in records)
+        by_month = Counter(str(item["month"]) for item in records)
+        unknown = sum(not bool(item["effective_interval_known"]) for item in records)
+        longest = 0
+        for identity in by_security:
+            dates = sorted(self._parse_session(str(item["session"]))
+                           for item in records if item["security_identity"] == identity)
+            run = 0
+            previous = None
+            for current in dates:
+                run = run + 1 if previous is not None and (current - previous).days <= 3 else 1
+                longest = max(longest, run)
+                previous = current
+        total = len(records)
+        reasons = []
+        if total > self.absolute_limit:
+            reasons.append("absolute_limit")
+        if applicable_symbol_sessions <= 0 or Decimal(total) / Decimal(applicable_symbol_sessions) > self.ratio_limit:
+            reasons.append("ratio_limit")
+        if by_security and max(by_security.values()) > self.per_security_limit:
+            reasons.append("per_security_limit")
+        if longest > self.per_security_consecutive_limit:
+            reasons.append("per_security_consecutive_limit")
+        if total and max(by_exchange.values(), default=0) / total > float(self.exchange_concentration_limit):
+            reasons.append("exchange_concentration_limit")
+        if max(by_month.values(), default=0) > self.month_concentration_limit:
+            reasons.append("month_concentration_limit")
+        if unknown > self.unknown_effective_interval_limit:
+            reasons.append("unknown_effective_interval_limit")
+        systematic_names = {"per_security_consecutive_limit", "exchange_concentration_limit", "month_concentration_limit"}
+        metrics = MappingProxyType({
+            "total": total, "ratio": str(Decimal(total) / Decimal(applicable_symbol_sessions)) if applicable_symbol_sessions else "Infinity",
+            "max_per_security": max(by_security.values(), default=0), "max_consecutive": longest,
+            "max_exchange_share": str(Decimal(max(by_exchange.values(), default=0)) / Decimal(total)) if total else "0",
+            "max_per_month": max(by_month.values(), default=0), "unknown_effective_intervals": unknown,
+        })
+        return StatusExceptionBudgetResultV2(
+            passed=not reasons, systematic_pattern=bool(systematic_names & set(reasons)),
+            reasons=tuple(reasons), metrics=metrics,
+        )
+
+    @staticmethod
+    def _parse_session(value):
+        if len(value) == 8 and value.isdigit():
+            return date(int(value[:4]), int(value[4:6]), int(value[6:]))
+        return date.fromisoformat(value)
