@@ -60,35 +60,49 @@ class StatusNormalizationPolicyV1:
 
     def normalize_suspension_events(self, rows, *, approved_sessions, source_payload_hash):
         ordered = tuple(sorted(rows, key=lambda row: (str(row.get("ts_code")), str(row.get("trade_date")))))
-        active = {}
-        facts = []
         sessions = tuple(sorted(approved_sessions))
+        session_index = {session: index for index, session in enumerate(sessions)}
+        observations = {}
         for row in ordered:
             required = {"ts_code", "trade_date", "suspend_timing", "suspend_type"}
             if set(row) < required:
                 raise StatusNormalizationError("required suspension field missing")
             identity, event_date, event_type = str(row["ts_code"]), _date(row["trade_date"]), str(row["suspend_type"]).upper()
-            if event_type == "S":
-                if identity in active:
-                    raise StatusNormalizationError("overlapping suspension start")
-                active[identity] = (event_date, row)
-            elif event_type == "R":
-                if identity not in active:
-                    raise StatusNormalizationError("suspension resume has no start")
-                start, start_row = active.pop(identity)
-                previous = tuple(session for session in sessions if session < event_date)
-                if not previous or event_date not in sessions:
-                    raise StatusNormalizationError("suspension boundary is outside approved sessions")
-                facts.append(self._suspension_fact(identity, "SUSPENDED", start, previous[-1], start_row,
-                                                   approved_sessions=sessions, source_payload_hash=source_payload_hash))
-                facts.append(self._suspension_fact(identity, "TRADING", event_date, None, row,
-                                                   approved_sessions=sessions, source_payload_hash=source_payload_hash))
-            else:
+            if event_type not in {"S", "R"}:
                 raise StatusNormalizationError("unknown suspension event type")
-        for identity, (start, row) in active.items():
-            facts.append(self._suspension_fact(identity, "SUSPENDED", start, None, row,
-                                               approved_sessions=sessions, source_payload_hash=source_payload_hash))
+            if event_date not in session_index:
+                raise StatusNormalizationError("suspension observation is outside approved sessions")
+            key = (identity, event_date)
+            previous = observations.get(key)
+            if previous is not None and previous["suspend_type"] != event_type:
+                raise StatusNormalizationError("conflicting suspension observations")
+            observations[key] = row
+
+        facts = []
+        by_identity = {}
+        for (identity, event_date), row in observations.items():
+            if str(row["suspend_type"]).upper() == "S":
+                by_identity.setdefault(identity, []).append((event_date, row))
+        for identity, items in sorted(by_identity.items()):
+            items.sort(key=lambda item: item[0])
+            run = [items[0]]
+            for item in items[1:]:
+                if session_index[item[0]] == session_index[run[-1][0]] + 1:
+                    run.append(item)
+                else:
+                    facts.append(self._suspension_run_fact(identity, run, sessions, source_payload_hash))
+                    run = [item]
+            facts.append(self._suspension_run_fact(identity, run, sessions, source_payload_hash))
         return tuple(sorted(facts, key=lambda fact: (fact.security_identity, fact.effective_from, fact.status_value)))
+
+    def _suspension_run_fact(self, identity, run, approved_sessions, source_payload_hash):
+        start, end = run[0][0], run[-1][0]
+        timing_values = {row.get("suspend_timing") for _, row in run}
+        value = "SUSPENDED" if timing_values == {None} or timing_values == {""} else "PARTIAL_SUSPENSION"
+        source = {"payload_hash": source_payload_hash, "rows": tuple(row for _, row in run)}
+        return self._suspension_fact(identity, value, start, end, source,
+                                     approved_sessions=approved_sessions,
+                                     source_payload_hash=source_payload_hash)
 
     def _suspension_fact(self, identity, value, start, end, row, *, approved_sessions, source_payload_hash):
         available = StatusAvailabilityPolicyV1.date_only_next_session().derive(

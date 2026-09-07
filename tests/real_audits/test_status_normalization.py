@@ -30,23 +30,31 @@ def test_non_st_name_is_explicit_clear_interval() -> None:
     assert fact.effective_to is None
 
 
-def test_suspension_start_and_resume_create_adjacent_intervals() -> None:
+def test_daily_suspension_observations_compress_consecutive_sessions() -> None:
     facts = StatusNormalizationPolicyV1.default().normalize_suspension_events((
-        {"ts_code": "000001.SZ", "trade_date": "20250103", "suspend_timing": "09:30", "suspend_type": "S"},
-        {"ts_code": "000001.SZ", "trade_date": "20250107", "suspend_timing": "09:30", "suspend_type": "R"},
+        {"ts_code": "000001.SZ", "trade_date": "20250103", "suspend_timing": None, "suspend_type": "S"},
+        {"ts_code": "000001.SZ", "trade_date": "20250106", "suspend_timing": None, "suspend_type": "S"},
+        {"ts_code": "000001.SZ", "trade_date": "20250107", "suspend_timing": None, "suspend_type": "R"},
     ), approved_sessions=SESSIONS, source_payload_hash="b" * 64)
     assert [(fact.status_value, fact.effective_from, fact.effective_to) for fact in facts] == [
         ("SUSPENDED", date(2025, 1, 3), date(2025, 1, 6)),
-        ("TRADING", date(2025, 1, 7), None),
     ]
 
 
-def test_unmatched_resume_and_malformed_dates_fail_closed() -> None:
+def test_resume_can_begin_inside_coverage_but_conflicting_daily_rows_fail_closed() -> None:
     policy = StatusNormalizationPolicyV1.default()
-    with pytest.raises(StatusNormalizationError, match="resume"):
+    assert policy.normalize_suspension_events((
+        {"ts_code": "000001.SZ", "trade_date": "20250103", "suspend_timing": None, "suspend_type": "R"},
+    ), approved_sessions=SESSIONS, source_payload_hash="b" * 64) == ()
+    with pytest.raises(StatusNormalizationError, match="conflicting"):
         policy.normalize_suspension_events((
-            {"ts_code": "000001.SZ", "trade_date": "20250103", "suspend_timing": "09:30", "suspend_type": "R"},
+            {"ts_code": "000001.SZ", "trade_date": "20250103", "suspend_timing": None, "suspend_type": "R"},
+            {"ts_code": "000001.SZ", "trade_date": "20250103", "suspend_timing": None, "suspend_type": "S"},
         ), approved_sessions=SESSIONS, source_payload_hash="b" * 64)
+
+
+def test_malformed_namechange_date_fails_closed() -> None:
+    policy = StatusNormalizationPolicyV1.default()
     with pytest.raises(StatusNormalizationError, match="date"):
         policy.normalize_namechange({"ts_code": "000001.SZ", "name": "ST坏", "start_date": "bad",
                                      "end_date": "", "ann_date": "20250102", "change_reason": "x"},

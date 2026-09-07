@@ -1,0 +1,107 @@
+from __future__ import annotations
+
+from dataclasses import fields
+from datetime import date, datetime, timezone
+import json
+from pathlib import Path
+import sys
+
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+
+from v5_2.data.dataset_equivalence import DatasetEquivalenceDecision, DatasetEquivalenceEvidenceV1  # noqa: E402
+from v5_2.data.evidence import EvidenceArtifactV1, EvidenceStatus, EvidenceType, EvidenceValidityPolicy, EvidenceValidityRuleV1  # noqa: E402
+from v5_2.data.identity import canonical_json, content_hash  # noqa: E402
+from v5_2.data.source_approval import SourceApprovalArtifactV1  # noqa: E402
+
+
+RUNTIME = ROOT / "data" / "phase_1b2a"
+GOVERNANCE = RUNTIME / "governance"
+NOW = datetime(2026, 9, 7, 6, 30, tzinfo=timezone.utc)
+
+
+def _latest(prefix):
+    paths = sorted(GOVERNANCE.glob(f"{prefix}-*.json"), key=lambda path: path.stat().st_mtime)
+    if not paths:
+        raise RuntimeError(f"required {prefix} artifact is missing")
+    return paths[-1], json.loads(paths[-1].read_text(encoding="utf-8"))
+
+
+def _mapping(item):
+    return {field.name: getattr(item, field.name) for field in fields(item)}
+
+
+def main() -> int:
+    audit_path, audit = _latest("status-audit")
+    classification_path, classification = _latest("missing-bar-classification")
+    replay_path, replay = _latest("status-replay")
+    raw_hashes = tuple(audit["raw_payload_hashes"])
+    source_version = content_hash(raw_hashes)
+    inputs = tuple(sorted((audit["evidence_id"], classification["content_hash"], replay["evidence_id"])))
+    equivalence = DatasetEquivalenceEvidenceV1.create(
+        source_name="datahubco_tushare_proxy", dataset_kind="daily_security_status",
+        reference_contract="V5.2 Phase 1B-2A PIT daily security status v1",
+        tested_endpoints=("namechange", "suspend-d"),
+        tested_fields=("ts_code", "name", "start_date", "end_date", "ann_date", "change_reason",
+                       "trade_date", "suspend_timing", "suspend_type"),
+        coverage_tested={"start": "2010-01-04", "end": "2025-12-31", "rows": 473424},
+        sample_rule={"inventory_id": audit["sample_inventory_id"], "sample_count": 61},
+        field_mapping={"suspend_type=S": "daily suspension observation", "ST name prefix": "risk warning"},
+        semantic_findings=("structural audit PASS", "suspend-d S covers each suspended date"),
+        missing_fields=("verified publication timestamp",), extra_fields=(),
+        value_comparison_summary={"matched": 0, "mismatched": 0, "unresolved": 61},
+        pit_findings=tuple(audit["pit_findings"]),
+        revision_findings=("first-middle-last real replay stable",),
+        pagination_findings=("32 terminal requests", "116 pages", "473424 rows"),
+        cross_source_findings=tuple(audit["cross_source_findings"]),
+        limitations=("plaintext provider transport", "survivorship audit failed", "88 missing bars unexplained"),
+        decision=DatasetEquivalenceDecision.INSUFFICIENT_EVIDENCE,
+        verified_at=NOW, input_artifact_ids=inputs,
+        policy_version="phase-1b2a-status-equivalence-v1",
+    )
+    evidence = []
+    statuses = {
+        EvidenceType.COVERAGE: EvidenceStatus.PASS,
+        EvidenceType.PIT_TIME: EvidenceStatus.FAIL,
+        EvidenceType.REVISION: EvidenceStatus.PASS,
+        EvidenceType.HISTORICAL_SAMPLE: EvidenceStatus.FAIL,
+        EvidenceType.CONTENT_IDENTITY: EvidenceStatus.PASS,
+        EvidenceType.LICENSE_USAGE: EvidenceStatus.PASS,
+        EvidenceType.CROSS_SOURCE: EvidenceStatus.FAIL,
+    }
+    for kind, status in statuses.items():
+        evidence.append(EvidenceArtifactV1.create(
+            evidence_type=kind, status=status, observed_at=NOW, verified_at=NOW,
+            policy_version="phase-1b2a-status-evidence-v1", source_version_identity=source_version,
+            input_artifact_ids=inputs, valid_until=None,
+            findings=(f"status_audit={audit['result'].get(kind.value.split('_')[0] + '_status', status.value)}",),
+        ))
+    validity = EvidenceValidityPolicy(
+        policy_version="phase-1b2a-status-validity-v1",
+        rules=tuple(EvidenceValidityRuleV1(kind, None, True, ("phase-1b2a-status-evidence-v1",)) for kind in EvidenceType),
+    )
+    approval = SourceApprovalArtifactV1.evaluate(
+        source_name="datahubco_tushare_proxy", dataset_kind="daily_security_status",
+        coverage_start=date(2010, 1, 4), coverage_end=date(2025, 12, 31), verified_at=NOW,
+        source_version_identity=source_version, policy_version="phase-1b2a-status-v1",
+        evaluator_version="phase-1b2a-status-evaluator-v1", evidence=evidence,
+        required_evidence_types=tuple(EvidenceType),
+        rule_set={"date_only_same_close": "UNAVAILABLE", "transport_security": "PLAINTEXT_HTTP"},
+        evidence_validity_policy=validity, resolution_as_of=NOW,
+        equivalence_evidence=equivalence,
+    )
+    (GOVERNANCE / f"daily_security_status-equivalence-{equivalence.evidence_id}.json").write_bytes(canonical_json(_mapping(equivalence)))
+    (GOVERNANCE / f"daily_security_status-approval-{approval.approval_id}.json").write_bytes(canonical_json(_mapping(approval)))
+    manifest_paths = tuple(GOVERNANCE.glob("daily_security_status-manifest-*.json"))
+    fact_paths = tuple((RUNTIME / "facts" / "daily_security_status").rglob("*.json")) if (RUNTIME / "facts" / "daily_security_status").exists() else ()
+    print(json.dumps({"decision": approval.decision.value, "approval_id": approval.approval_id,
+                      "equivalence": equivalence.decision.value, "equivalence_id": equivalence.evidence_id,
+                      "published_manifest_count": len(manifest_paths), "published_fact_count": len(fact_paths),
+                      "audit_artifact": audit_path.name, "classification_artifact": classification_path.name,
+                      "replay_artifact": replay_path.name}, indent=2))
+    return 0 if approval.decision.value in {"PENDING", "REJECTED"} and not manifest_paths and not fact_paths else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
