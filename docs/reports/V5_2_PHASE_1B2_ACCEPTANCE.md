@@ -152,3 +152,87 @@ READY FOR LABEL ENGINE = NO
 ```
 
 STOP: Phase 1B-2B was not started. The next corrective iteration must close the official 61-case verification, repair the historical survivorship universe gap through immutable supersession/replacement, freeze a real exception budget before reevaluation, and resolve the 89 unexplained keys. It must not proceed to later phases while this gate remains failed.
+
+## Phase 1B-2A evidence-closure iteration — 2026-09-08
+
+This iteration closed the consistency and local-exception governance work without reacquiring the frozen 32 requests, 116 pages, or 473,424 rows. It did not enter Phase 1B-2B.
+
+### Evidence results
+
+- The equivalence unexplained count is now derived from the immutable classification artifact; the hard-coded 88/89 inconsistency is removed and regression-tested.
+- Predeclared `StatusExceptionBudgetV2` passed for all 89 records: ratio `0.00003577459433016895657567190919`, maximum per security 8, maximum consecutive 8, maximum exchange share `0.5393258426966292134831460674`, maximum per month 16, unknown effective intervals 0, systematic pattern false. All 89 records are content-addressed, quarantined, and research-excluded.
+- Exact 6,489-key immutable supersession: `SUSPENDED=6400`, `LOCAL_EXCEPTION=89`, `UNEXPLAINED=0`; classification `34612813c3bfdeb233bf41b66796a9ca9e89751062523ca7be30fc4c76f56420`; keys preserved=true; research_eligible=false.
+- Historical universe reconciliation: total 542; `NON_TARGET=291`, `TARGET_A_SHARE_REQUIRED=1` (`600747.SH`), `UNRESOLVED=250`. Supplement count 1; reconciliation `9496756d9691c8dc7b61b1876e4424c2a992cf6b86aebbd230ec06496b1f7c8d`; supplement `d67d886299be85bb5585c9103140ef327fe13b78161903f7e5120646a8ee9e8f`. The 250 unresolved identities keep survivorship fail-closed.
+- Frozen official inventory was preserved exactly: 61 entries / 56 unique events. Ledger `f9a8e6b6962d6db7d242bc32305a91f9ac3dfb745e6102b6dcdf6a3d1a4c2f8f`: MATCH=0, MISMATCH=0, UNRESOLVED=0, OFFICIAL_REFERENCE_UNAVAILABLE=61. No unavailable reference was promoted to MATCH; cross-source remains FAIL.
+- `StatusAvailabilityPolicyV2` fixes the V5.2 research cutoff at 16:30 Asia/Shanghai and machine-represents publication timestamp, market-observable-by-close, conservative-after-close, and next-session-safe bases. Acquisition time is ignored. Because exact official event evidence and semantic mapping remain incomplete, PIT semantics remain FAIL for dataset approval.
+- Publisher decision remains `REJECTED`; approval `f46ab5bd8ec4bdfbc425b533e57065cb9203b797a05d64b5b612872235a6115e`; approved facts 0; DatasetManifest count 0.
+
+### Validation commands and exact results
+
+```text
+.\.venv\Scripts\python.exe scripts\reconcile_phase_1b2a_universe.py
+total=542; NON_TARGET=291; TARGET_A_SHARE_REQUIRED=1; UNRESOLVED=250; supplement_count=1; supplement_identity=600747.SH
+
+.\.venv\Scripts\python.exe scripts\audit_phase_1b2a_official_samples.py
+entries=61; unique_events=56; OFFICIAL_REFERENCE_UNAVAILABLE=61; systematic_defect=false
+
+.\.venv\Scripts\python.exe scripts\reclassify_phase_1b2a_missing_bars.py
+total=6489; SUSPENDED=6400; LOCAL_EXCEPTION=89; UNEXPLAINED=0; preserved_keys=true; research_eligible=false
+
+.\.venv\Scripts\python.exe scripts\publish_phase_1b2a_status.py
+decision=REJECTED; equivalence=INSUFFICIENT_EVIDENCE; published_manifest_count=0; published_fact_count=0
+
+.\.venv\Scripts\python.exe -m pytest -q
+282 passed in 75.06s (0:01:15)
+
+.\.venv\Scripts\python.exe scripts\verify_standalone.py
+PASS forbidden imports: 0
+PASS forbidden active paths/dependencies: 0
+PASS prohibited repository inventory: 0
+PASS phase 1a architecture boundary violations: 0
+
+.\.venv\Scripts\python.exe scripts\clean_room_acceptance.py
+clean_room_dependencies=true; clean_room_install=true; clean_room_tests=true; build=true; wheel_install=true; wheel_smoke=true; zero_dependency_acceptance=true
+clean-room test_output: 282 passed in 109.81s (0:01:49)
+
+git diff --check
+PASS (no output)
+```
+
+### Exit matrix
+
+```text
+REAL ACQUISITION = PASS
+STATUS AVAILABILITY POLICY = PASS
+PIT SEMANTICS = FAIL
+
+OFFICIAL 61-CASE SAMPLE:
+MATCH = 0
+MISMATCH = 0
+UNRESOLVED = 0
+OFFICIAL_REFERENCE_UNAVAILABLE = 61
+
+HISTORICAL UNIVERSE RECONCILIATION = FAIL
+HISTORICAL UNIVERSE SUPPLEMENT = 1
+
+6,489 MISSING BARS:
+SUSPENDED = 6,400
+LOCAL_EXCEPTION = 89
+UNEXPLAINED = 0
+
+EXCEPTION BUDGET = PASS
+SYSTEMATIC DEFECT AUDIT = PASS
+SURVIVORSHIP AUDIT = FAIL
+CROSS SOURCE = FAIL
+
+DAILY SECURITY STATUS APPROVAL = REJECTED
+APPROVED STATUS FACTS = 0
+DATASET MANIFEST = FAIL
+PHASE 1B-2A = FAIL
+
+PHASE 1B-2 overall = FAIL
+HISTORICAL PIT DATA = FAIL
+READY FOR LABEL ENGINE = NO
+```
+
+STOP: no later phase was started. Remaining blockers are the 250 unresolved historical-universe identities, exact official evidence for the frozen 61 entries, and semantic application of that evidence to PIT availability.
