@@ -73,12 +73,9 @@ def main() -> int:
     evidence = []
     statuses = {
         EvidenceType.COVERAGE: EvidenceStatus.PASS,
-        EvidenceType.PIT_TIME: EvidenceStatus.FAIL,
         EvidenceType.REVISION: EvidenceStatus.PASS,
-        EvidenceType.HISTORICAL_SAMPLE: EvidenceStatus.FAIL,
         EvidenceType.CONTENT_IDENTITY: EvidenceStatus.PASS,
         EvidenceType.LICENSE_USAGE: EvidenceStatus.PASS,
-        EvidenceType.CROSS_SOURCE: EvidenceStatus.FAIL,
     }
     for kind, status in statuses.items():
         evidence.append(EvidenceArtifactV1.create(

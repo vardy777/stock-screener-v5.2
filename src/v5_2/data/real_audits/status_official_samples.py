@@ -36,7 +36,7 @@ def build_official_sample_ledger(inventory_id: str, samples: Sequence[Mapping[st
     for index, sample in enumerate(samples):
         event_id = str(sample["event_id"])
         evidence = official.get(event_id)
-        resolution = "OFFICIAL_REFERENCE_UNAVAILABLE" if not evidence else evidence["resolution"]
+        resolution = "UNRESOLVED" if not evidence else evidence["resolution"]
         if resolution not in {"MATCH", "MISMATCH", "UNRESOLVED", "OFFICIAL_REFERENCE_UNAVAILABLE"}:
             raise ValueError("invalid official resolution")
         entry_id = content_hash({"inventory_id": inventory_id, "entry_index": index, "event_id": event_id})

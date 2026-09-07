@@ -16,7 +16,7 @@ INVENTORY_ID = "7ca99bfecd2731d5442ea62eb496afe3cff9b01a7ba32c1434a461c1a931a9c0
 def main() -> int:
     directory = ROOT / "data" / "phase_1b2a" / "governance"
     inventory = json.loads((directory / f"status-sample-inventory-{INVENTORY_ID}.json").read_text(encoding="utf-8"))
-    # No exact official record has yet been archived for these exact event IDs. Fail closed; never infer MATCH.
+    # No exact official retrieval result has yet been archived for these event IDs. Keep unresolved; never infer MATCH.
     ledger = build_official_sample_ledger(INVENTORY_ID, inventory["samples"], official={})
     output = directory / f"status-official-sample-ledger-{ledger.content_hash}.json"
     output.write_bytes(canonical_json({"schema_version": "OfficialStatusSampleLedgerV1", **asdict(ledger)}))
