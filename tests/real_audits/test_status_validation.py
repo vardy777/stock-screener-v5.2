@@ -9,7 +9,7 @@ def test_validation_separates_value_coverage_from_pit_sufficiency() -> None:
         later_delisted_symbols=(), official_sample_matches=(),
     )
     assert result.structural_status == "PASS"
-    assert result.pit_status == "FAIL"
+    assert result.pit_status == "PENDING"
     assert result.decision == "INSUFFICIENT_EVIDENCE"
 
 
