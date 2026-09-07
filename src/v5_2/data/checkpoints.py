@@ -69,6 +69,9 @@ class CheckpointStore:
     def _path(self, request_id: str) -> Path:
         return self.root / "checkpoints" / f"{request_id}.json"
 
+    def exists(self, request_id: str) -> bool:
+        return self._path(request_id).is_file()
+
     def save(self, checkpoint: CheckpointV1) -> Path:
         path = self._path(checkpoint.request_id)
         path.parent.mkdir(parents=True, exist_ok=True)
