@@ -176,6 +176,15 @@ class RawArtifactStore:
             if artifact.request_id != request_id or artifact.payload_hash != payload_hash:
                 raise RawArtifactError("raw artifact identity mismatch")
 
+    def load_payload_hashes(self, source_name: str, dataset_kind: str, request_id: str,
+                            payload_hashes: tuple[str, ...]) -> tuple[RawPayloadArtifactV1, ...]:
+        self.require_payload_hashes(source_name, dataset_kind, request_id, payload_hashes)
+        request_root = self.root / "raw" / source_name / dataset_kind / request_id[:16]
+        result = []
+        for payload_hash in payload_hashes:
+            result.append(self.read_payload(next(request_root.rglob(f"{payload_hash}.json"))))
+        return tuple(result)
+
     def put_receipt(self, receipt: AcquisitionReceiptV1) -> Path:
         path = (
             self.root

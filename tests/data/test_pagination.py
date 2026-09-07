@@ -197,6 +197,29 @@ def test_resume_rejects_checkpoint_with_missing_raw_artifact(tmp_path: Path) -> 
         )
 
 
+def test_resume_of_completed_request_reuses_raw_without_network(tmp_path: Path) -> None:
+    raw_store = RawArtifactStore(tmp_path)
+    prior = RawPayloadArtifactV1.create(
+        request_id=request().request_id, page_identity={"offset": 0},
+        provider_payload={"rows": ({"id": 0},)},
+        semantic_metadata={"response_code": 0, "response_status": "ok", "has_more": False, "total_count": 1},
+    )
+    raw_store.put_payload("synthetic", "synthetic_daily_bar", prior)
+    CheckpointStore(tmp_path).save(CheckpointV1.create(
+        request_id=request().request_id, accepted_payload_hashes=(prior.payload_hash,), next_offset=1,
+        request_policy_version="request-v1", acquisition_policy_version="acquisition-v1",
+    ))
+    class MustNotCall:
+        def fetch_page(self, *args, **kwargs):
+            raise AssertionError("completed request must not call provider")
+    artifacts = acquire_pages(
+        request=request(), client=MustNotCall(), credential=load_tushare_credential(env={"TUSHARE_TOKEN": "sentinel"}),
+        raw_store=raw_store, checkpoint_store=CheckpointStore(tmp_path), acquisition_policy_version="acquisition-v1",
+        resume=True, controls=controls(),
+    )
+    assert tuple(item.payload_hash for item in artifacts) == (prior.payload_hash,)
+
+
 def test_nonmatching_page_identity_fails_closed(tmp_path: Path) -> None:
     with pytest.raises(AcquisitionError, match="page identity"):
         acquire_pages(

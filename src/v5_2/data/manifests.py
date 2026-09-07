@@ -43,6 +43,13 @@ class DatasetManifestV1:
     quarantined_count: int | None
     quarantined_identity_hashes: tuple[str, ...]
     approval_policy_id: str | None
+    upstream_approval_ids: tuple[str, ...]
+    request_inventory_id: str | None
+    normalization_policy_id: str | None
+    unit_policy_id: str | None
+    exception_policy_id: str | None
+    exception_set_hash: str | None
+    cross_source_evidence_id: str | None
     manifest_hash: str
 
     @classmethod
@@ -76,6 +83,13 @@ class DatasetManifestV1:
         quarantined_count: int | None = None,
         quarantined_identity_hashes: tuple[str, ...] = (),
         approval_policy_id: str | None = None,
+        upstream_approval_ids: tuple[str, ...] = (),
+        request_inventory_id: str | None = None,
+        normalization_policy_id: str | None = None,
+        unit_policy_id: str | None = None,
+        exception_policy_id: str | None = None,
+        exception_set_hash: str | None = None,
+        cross_source_evidence_id: str | None = None,
     ) -> DatasetManifestV1:
         approving = {ApprovalDecision.APPROVED, ApprovalDecision.APPROVED_WITH_RULES}
         if approval.decision not in approving:
@@ -114,6 +128,16 @@ class DatasetManifestV1:
                 raise ManifestError("security master disposition counts do not reconcile")
             if eligible_count != row_count or len(quarantined_identity_hashes) != quarantined_count:
                 raise ManifestError("security master quarantine lineage is incomplete")
+        if source_name == "datahubco_tushare_proxy" and dataset_kind == "daily_bar" and (
+            len(upstream_approval_ids) != 2
+            or not request_inventory_id
+            or not normalization_policy_id
+            or not unit_policy_id
+            or not exception_policy_id
+            or not exception_set_hash
+            or not cross_source_evidence_id
+        ):
+            raise ManifestError("daily bar manifest requires frozen governance and audit lineage")
         for name, value in (
             ("created_at", created_at),
             ("approval_resolution_as_of", approval_resolution_as_of),
@@ -151,6 +175,13 @@ class DatasetManifestV1:
             "quarantined_count": quarantined_count,
             "quarantined_identity_hashes": tuple(sorted(set(quarantined_identity_hashes))),
             "approval_policy_id": approval_policy_id,
+            "upstream_approval_ids": tuple(upstream_approval_ids),
+            "request_inventory_id": request_inventory_id,
+            "normalization_policy_id": normalization_policy_id,
+            "unit_policy_id": unit_policy_id,
+            "exception_policy_id": exception_policy_id,
+            "exception_set_hash": exception_set_hash,
+            "cross_source_evidence_id": cross_source_evidence_id,
         }
         digest = content_hash(body)
         values = dict(body)

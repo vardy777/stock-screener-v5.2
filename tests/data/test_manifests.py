@@ -210,3 +210,32 @@ def test_wrong_approval_object_cannot_satisfy_pinned_manifest() -> None:
         resolution_as_of=NOW,
     )
     assert result.verify_pinned_approval(replacement) is False
+
+
+def test_datahub_daily_bar_manifest_pins_frozen_governance_lineage() -> None:
+    selected = replace(
+        approval(), source_name="datahubco_tushare_proxy", dataset_kind="daily_bar",
+        equivalence_evidence_id="equivalence-id",
+    )
+    common = dict(
+        created_at=NOW, source_name="datahubco_tushare_proxy", dataset_kind="daily_bar",
+        approval=selected, approval_resolution_as_of=NOW,
+        coverage_start=date(2020, 1, 1), coverage_end=date(2020, 12, 31),
+        row_count=10, symbol_count=2, raw_payload_hashes=("a" * 64,),
+        normalized_content_hashes=("b" * 64,), fact_content_hashes=("c" * 64,),
+        normalizer_version="v1", availability_policy_version="v1", quality_findings=(),
+        pit_validation_status="PASS", rule_compliance_status="PASS", pagination_complete=True,
+        audit_policy_id="audit", endpoint_identities=("daily",), receipt_hashes=("receipt",),
+        approval_policy_id="approval-policy-v1",
+    )
+    with pytest.raises(ManifestError, match="daily bar manifest"):
+        DatasetManifestV1.create(**common)
+    result = DatasetManifestV1.create(
+        **common,
+        upstream_approval_ids=("calendar-approval", "master-approval"),
+        request_inventory_id="inventory-id", normalization_policy_id="normalization-id",
+        unit_policy_id="unit-id", exception_policy_id="exception-policy-id",
+        exception_set_hash="exception-set-hash", cross_source_evidence_id="cross-source-id",
+    )
+    assert result.upstream_approval_ids == ("calendar-approval", "master-approval")
+    assert result.request_inventory_id == "inventory-id"

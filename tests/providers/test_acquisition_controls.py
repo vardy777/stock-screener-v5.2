@@ -111,3 +111,24 @@ def test_permanent_failure_never_retries() -> None:
 def test_invalid_retry_attempt_limit_fails_closed(attempts: object) -> None:
     with pytest.raises(ValueError):
         RetryPolicyV1(attempts, 1.0, 2.0, "retry-v1")  # type: ignore[arg-type]
+def test_rate_limiter_serializes_concurrent_callers() -> None:
+    import threading
+    import time
+
+    limiter = RateLimiter(min_interval_seconds=0.01)
+    observed = []
+    lock = threading.Lock()
+
+    def call():
+        limiter.acquire(time.monotonic, time.sleep)
+        with lock:
+            observed.append(time.monotonic())
+
+    started = time.monotonic()
+    threads = [threading.Thread(target=call) for _ in range(4)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert len(observed) == 4
+    assert time.monotonic() - started >= 0.024

@@ -63,7 +63,7 @@ def acquire_pages(
         offset = checkpoint.next_offset
         accepted = list(checkpoint.accepted_payload_hashes)
         try:
-            raw_store.require_payload_hashes(
+            prior_artifacts = raw_store.load_payload_hashes(
                 request.source_name,
                 request.dataset_kind,
                 request.request_id,
@@ -71,6 +71,8 @@ def acquire_pages(
             )
         except RawArtifactError:
             raise AcquisitionError("checkpoint references missing raw artifact") from None
+        if prior_artifacts and prior_artifacts[-1].semantic_metadata.get("has_more") is False:
+            return prior_artifacts
     else:
         offset = 0
         accepted = []
@@ -103,6 +105,8 @@ def acquire_pages(
             semantic_metadata={
                 "response_code": page.response_code,
                 "response_status": page.response_status,
+                "has_more": page.has_more,
+                "total_count": page.total_count,
             },
         )
         raw_store.put_payload(request.source_name, request.dataset_kind, artifact)

@@ -312,6 +312,174 @@ CREDENTIAL / SENTINEL FINDINGS = 0
 GIT DIFF CHECK = PASS
 ```
 
+## Daily-bar completion — final superseding acceptance (2026-09-07)
+
+This section supersedes every earlier daily-bar `NOT STARTED`, `PENDING`, Phase 1B-1 `FAIL`, and readiness statement in this report. It does not supersede the frozen trade-calendar or security-master approvals.
+
+### Frozen entry and real acquisition
+
+```text
+TRADE CALENDAR APPROVAL ID = 1581b4d367dba1256247ddd13e09b53d0f95b5b1deeb40af9e6ed4a36606353b
+SECURITY MASTER APPROVAL ID = f208c17accba6b669359f476b2fdf3a1bc9ec6856e7fa1831ccdd1c42b80d8cf
+DAILY BAR UNIVERSE ID = 2456669d1158c8efec6e3204082ce67ca87646236120316307822f9e0f19ad01
+DAILY BAR REQUEST INVENTORY ID = 9b1d034f00ab0d637bc56ab120ffcf725f226f21c09d27c3b85e36a4f644a6ce
+EXECUTABLE PLAN ID = 93f30b87c86721ea9632a0e566c0a6c8acf1fe12796889d84765c6b48915f1b3
+PRICE BASIS = UNADJUSTED_RAW
+
+EXPECTED REQUESTS = 5,548
+COMPLETED REQUESTS = 5,548
+PAGES = 5,548
+RAW ROWS = 13,138,865
+RAW ACQUISITION PROCESS EXIT = 0
+```
+
+All requests used canonical `ProviderRequestV1` identities mapped bijectively from the frozen logical inventory. Every request has one terminal page; schema, finite numeric values, OHLC inequalities, non-negative volume/amount, approved-session membership, request identity and effective security identity passed the full-row scan. The known provider-current `302132.SZ` history is normalized through the approved effective identity graph to `300114.SZ` before 2025-02-17.
+
+### Research-scope coverage and rules
+
+```text
+COVERAGE = 2024-01-01 -> 2025-12-31
+REQUESTED SYMBOLS = 5,548
+EFFECTIVE IDENTITIES = 5,549
+REQUESTED SESSIONS = 485
+APPLICABLE SYMBOL-SESSIONS = 2,487,799
+OBSERVED FACTS = 2,481,310
+MISSING SYMBOL-SESSIONS = 6,489
+COVERAGE RATIO = 99.73916703077701%
+SYMBOLS WITH FACTS = 5,261
+```
+
+The 6,489 absent bars are not interpreted as suspension, delisting, or zero-volume facts. Approval is therefore rule-scoped to observed bars only. Security-status semantics remain Phase 1B-2 work. No absent combination is materialized as a `DailyBarFactV1`.
+
+### Units, cross-source and adjustment audit
+
+```text
+CROSS-SOURCE EVIDENCE ID = 32d3b74551fc962cecb61a11839bdc177f1f3492fa1d11f8fba2fc9c15c7dd87
+REFERENCE = BaoStock adjustflag=3 (unadjusted)
+FROZEN STRATA = normal, high volatility, limit-like, IPO boundary,
+                delisting boundary, holiday-adjacent before/after,
+                identity-transition boundary
+PRICE TOLERANCE = 0.0001
+ALL OHLC DIFFERENCES = 0.0000
+VOLUME CONVERSION = provider vol * 100 = shares
+ALL VOLUME DIFFERENCES = 0 shares
+AMOUNT CONVERSION = provider amount * 1000 = yuan
+MAXIMUM AMOUNT DIFFERENCE = 0.47 yuan
+FROZEN AMOUNT TOLERANCE = 1 yuan
+ZERO-VOLUME OBSERVATION = NOT OBSERVED IN PROVIDER RAW
+
+ADJUSTMENT SAMPLE = 000001.SZ / 2010-01-04
+PROVIDER CLOSE = 23.71
+REFERENCE UNADJUSTED CLOSE = 23.7100
+REFERENCE FORWARD-ADJUSTED CLOSE = 6.1242455800
+UNADJUSTED RAW VALIDATION = PASS
+```
+
+### Replay, approval and immutable facts
+
+The real replay selected the first, middle and last frozen logical requests. All three later acquisitions reproduced the exact prior payload hash and produced a new receipt. The changed-payload revision branch remains covered by the provider identity contract test.
+
+```text
+REAL REPLAY EVIDENCE ID = f2dc6b315eef600dc83baa74224d8149f2c1ea83bc6ebed7586dd3c4cb8c19cf
+REPLAY SAMPLE = 3/3 SAME PAYLOAD HASH
+NEW RECEIPTS = 3/3
+
+SUPERSEDED DAILY BAR APPROVAL = 50777e6ca46c0149885f0218291a0ce539f36cbfc1ef71e6e56a9f8131a12eee
+SUPERSEDED APPROVAL DISPOSITION = IMMUTABLY REVOKED AFTER EFFECTIVE-IDENTITY COVERAGE ACCOUNTING CORRECTION
+CURRENT DAILY BAR APPROVAL = APPROVED_WITH_RULES
+CURRENT DAILY BAR APPROVAL ID = 1ead49dfaefdfb8e4e75c9d94170d440abe77986e3388a6e96e6805537c1173c
+DAILY BAR FACTS = 2,481,310
+FACT SHARDS = 5,260
+FACT EFFECTIVE IDENTITIES = 5,261
+PINNED DAILY-BAR RECEIPTS = 5,551
+DATASET MANIFEST ID = 1ad71807083aba6222fa6ab27aedf47c0ac2e2ba65a56ad1ce5ae5956db43ead
+```
+
+Each fact pins its raw payload hash and deterministically applies `UNADJUSTED_RAW`, verified unit factors, effective identity, and `available_at = D 15:00 Asia/Shanghai`. Historical acquisition time is not used as historical availability. The manifest pins the exact daily approval, both upstream approvals, request inventory, raw and receipt hashes, normalization/unit/exception policies, empty exception-set hash, cross-source evidence, coverage and fact-shard hashes.
+
+### Complete validation command record
+
+```text
+COMMAND: .\.venv\Scripts\python.exe scripts\phase_1b1_audit.py daily_bar --resume --workers 64
+RESULT: exit 0; requests=5,548/5,548; pages=5,548; rows=13,138,865
+
+COMMAND: .\.venv\Scripts\python.exe scripts\evaluate_daily_bar.py
+RESULT: exit 0; full-row structural findings only rows=13,138,865; audit id=c090d1762828db2b713a9c7e70ab076a2a37efc4a9a5f111bf7fdb61de9a0939
+
+COMMAND: .\.venv\Scripts\python.exe scripts\audit_daily_bar_reference.py
+RESULT: exit 0; cross-source PASS; unit PASS; UNADJUSTED_RAW PASS; evidence id=32d3b74551fc962cecb61a11839bdc177f1f3492fa1d11f8fba2fc9c15c7dd87
+
+COMMAND: .\.venv\Scripts\python.exe scripts\replay_daily_bar_sample.py
+RESULT: exit 0; first/middle/last payload hashes stable; distinct receipts created; evidence id=f2dc6b315eef600dc83baa74224d8149f2c1ea83bc6ebed7586dd3c4cb8c19cf
+
+COMMAND: .\.venv\Scripts\python.exe scripts\publish_daily_bar_facts.py
+RESULT: exit 0; approval=APPROVED_WITH_RULES; facts=2,481,310; symbols=5,261; shards=5,260; manifest=PASS
+
+COMMAND: .\.venv\Scripts\python.exe -m pytest tests/data/test_manifests.py -q
+RESULT: 8 passed in 0.03s
+
+COMMAND: .\.venv\Scripts\python.exe -m pytest tests/data/test_daily_bar_facts.py tests/data/test_manifests.py tests/real_audits/test_daily_bar_audit_contracts.py tests/real_audits/test_daily_bar_entry.py -q
+RESULT: 25 passed in 0.06s
+
+COMMAND: .\.venv\Scripts\python.exe -m pytest -q
+RESULT: initial final run 239 passed in 43.27s; post-package-metadata final rerun 239 passed in 9.74s
+
+COMMAND: .\.venv\Scripts\python.exe -m compileall -q src scripts
+RESULT: exit 0
+
+COMMAND: .\.venv\Scripts\python.exe scripts\verify_standalone.py
+RESULT: exit 0; forbidden imports=0; forbidden active paths/dependencies=0; prohibited repository inventory=0; phase 1a boundary violations=0
+
+COMMAND: .\.venv\Scripts\python.exe -m build
+RESULT: exit 0; sdist and wheel built successfully
+
+COMMAND: .\.venv\Scripts\python.exe scripts\clean_room_acceptance.py
+RESULT: exit 0; build=true; clean_room_dependencies=true; clean_room_install=true; clean_room_tests=true; old_pythonpath_removed=true; wheel_install=true; wheel_smoke=true; zero_dependency_acceptance=true; archive findings=0; clean-room tests="239 passed in 102.68s"
+
+COMMAND: actual credential scan over every tracked and untracked non-ignored repository candidate; git ls-files .env; git check-ignore -v .env
+RESULT: repository-candidate credential findings=0; .env tracked=NO; .env ignored by .gitignore:9
+
+COMMAND: git diff --check
+RESULT: exit 0; no whitespace errors (Git emitted LF-to-CRLF working-copy warnings only)
+```
+
+### Final Phase 1B-1 gate
+
+```text
+DAILY BAR REAL ACQUISITION = PASS
+
+RAW COVERAGE = PASS
+PAGINATION = PASS
+SCHEMA = PASS
+OHLC STRUCTURE = PASS
+SESSION ALIGNMENT = PASS
+SECURITY IDENTITY ALIGNMENT = PASS
+
+VOLUME UNIT = PASS
+AMOUNT UNIT = PASS
+
+UNADJUSTED RAW VALIDATION = PASS
+
+CROSS SOURCE = PASS
+REPLAY = PASS
+REVISION = PASS
+
+EXCEPTION BUDGET = PASS
+SYSTEMATIC DEFECT AUDIT = PASS
+
+DAILY BAR APPROVAL = APPROVED_WITH_RULES
+APPROVED FACTS PUBLICATION = PASS
+DATASET MANIFEST = PASS
+
+PHASE 1B-1 = PASS
+READY FOR PHASE 1B-2 = YES
+
+HISTORICAL PIT DATA = FAIL
+READY FOR LABEL ENGINE = NO
+```
+
+The project must stop at this gate. Phase 1B-2, features, labels, ranking, ML, backtesting and alpha claims remain unauthorized.
+
 ## TLS revalidation and exceptional-security governance — superseding result
 
 This section supersedes the prior upstream result while preserving every prior artifact. The original SZSE source, composite, V2 adoption, and approval remain immutable, but are now covered by transport-trust artifact `2e5a273b0d2a68268fba93a79403402038306eaa9f4bd5daadfed2eae66c2937` with `TLS_VERIFICATION=DISABLED` and `EVIDENCE_TRUST=INVALID_FOR_FINAL_APPROVAL`. Approval `08933ef18a3532078ade97f6f5f574216e68f04225a95d7c7838bed5ad9b840d` is immutably revoked by `9591e05cc5fae5a059a6183f791f20ca4261ba8fb9b50619439fe1aef625037b`; it is not inherited by the secure evaluation.
