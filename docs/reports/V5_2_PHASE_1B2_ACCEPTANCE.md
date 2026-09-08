@@ -646,3 +646,114 @@ CREDENTIAL_SCAN_FINDINGS=0
 git diff --check
 PASS (line-ending notices only; no whitespace errors)
 ```
+
+## Phase 1B-2A Prospective Evidence Contract V2 — 2026-09-09
+
+Starting HEAD: `f30ef5fe23c212bcfebc537d7608e2adfb3bdd19`.
+
+### Immutable contract history
+
+```text
+Contract V1 = FAIL (permanent)
+failure_reason = frozen ST_EXIT sample construction defect
+V1 result = MATCH 64 / MISMATCH 4 / UNAVAILABLE 3
+```
+
+V1 artifacts and failure were not deleted, overwritten, superseded as PASS, or used to choose V2 outcomes.
+
+P0 found one additional selector edge case before the V2 freeze: substring matching would treat a non-prefix name such as `BEST` as risk-warning. The selector now recognizes only the Chinese-market risk-warning prefixes and regression-tests `ST -> *ST = NOT EXIT`, `*ST -> ST = NOT EXIT`, `ST -> ordinary = EXIT`, `*ST -> ordinary = EXIT`, and non-prefix `ST` substrings as not risk-warning.
+
+```text
+Contract V2 ID = 3a9efd2f1047d9ad0432a72202bf1b8e7f926d153c339106475c37a694b20917
+Inventory V2 ID = cef91ec0a055f01ac2f0f82ec8e15ce75f4e000acd2123a70685fb25d1df3c9c
+freeze commit = 53578aa7e50d151eb292472bfed2fd532fdb4748
+sample count = 71
+ACTIVE_ORDINARY_STATUS = 10
+ACTUAL_FIRST_TRADABLE_SESSION = 10
+DELISTING_BOUNDARY = 10
+ST_ENTER = 10
+ST_EXIT = 10
+FULL_DAY_SUSPENSION = 10
+RESUMPTION = 10
+IDENTITY_TRANSITION = 1
+```
+
+The V2 contract and inventory were committed before the first independent V2 retrieval. Every frozen sample pins identity, session, semantic, provider value, semantic assertion, effective interval, provider evidence IDs, and candidate hash.
+
+### Bounded independent validation
+
+The first mechanical pass exposed an evaluator correctness issue: it counted BaoStock daily status alone as MATCH for listing and delisting strata even though the frozen contract requires both an official anchor and independent daily evidence. That provisional 71/71 count was not accepted or used by a gate.
+
+The evaluator was corrected fail-closed on the same immutable inventory. A bounded follow-up retrieved the exact `601028.SH` delisting date from issuer announcement 2025-044 hosted by CNINFO and pinned the retrieved PDF SHA-256. No security was replaced or reselected.
+
+Final immutable evidence ledger:
+
+```text
+ledger_id = 0f6772947b821a5819614c652d08544ac8bc14b789b796eb0f4338f71c79e473
+MATCH = 52
+MISMATCH = 0
+INDEPENDENT_EVIDENCE_UNAVAILABLE = 19
+decision = PENDING EVIDENCE
+```
+
+The 19 unavailable entries are exactly 10 actual-first-tradable-session samples and 9 delisting-boundary samples that still lack the official anchor required by the preregistered contract. BaoStock observations remain independent daily evidence but cannot substitute for an SSE/SZSE/issuer official anchor. Unavailable entries were not converted to MATCH. The bounded pass ended without open-ended archaeology.
+
+### PIT and formal runtime result
+
+V2 did not satisfy the cross-source contract, so P3/P4 PIT Final Closure was not entered. `StatusAvailabilityPolicyV2` and the historical 16:30 Asia/Shanghai cutoff were unchanged. No PIT PASS artifact was created; `pit_evidence=None` remains required.
+
+The runtime path now pins exact V2 inventory and ledger IDs, exact universe/audit/exception/source-version inputs, and an on-disk content-addressed revocation registry. It no longer selects those formal inputs by modification time or uses a placeholder source identity.
+
+```text
+STRUCTURAL = PASS
+PIT = PENDING
+CROSS_SOURCE = PENDING
+SURVIVORSHIP = PASS
+EXCEPTION_BUDGET = PASS
+SYSTEMATIC_DEFECT = PASS
+SOURCE_APPROVAL = PENDING
+PUBLICATION_ALLOWED = false
+APPROVED_FACTS = 0
+DATASET_MANIFEST = 0
+PHASE 1B-2A = FAIL CLOSED / PENDING EVIDENCE
+```
+
+No V3 contract, PIT PASS artifact, approved status fact, DatasetManifest, scheduler, 1B-2B work, or downstream research work was created.
+
+### Verification commands and exact results
+
+```text
+.\.venv\Scripts\python.exe scripts\freeze_phase_1b2a_prospective_inventory.py
+contract_id=3a9efd2f1047d9ad0432a72202bf1b8e7f926d153c339106475c37a694b20917; inventory_id=cef91ec0a055f01ac2f0f82ec8e15ce75f4e000acd2123a70685fb25d1df3c9c; sample_count=71
+
+.\.venv\Scripts\python.exe scripts\acquire_phase_1b2a_prospective_evidence.py
+total=71; MATCH=52; MISMATCH=0; INDEPENDENT_EVIDENCE_UNAVAILABLE=19; ledger_id=0f6772947b821a5819614c652d08544ac8bc14b789b796eb0f4338f71c79e473
+
+.\.venv\Scripts\python.exe scripts\evaluate_phase_1b2a_gates.py
+structural_status=PASS; pit_status=PENDING; cross_source_status=PENDING; survivorship_status=PASS; exception_budget_status=PASS; systematic_defect_status=PASS; decision=PENDING; publication_allowed=false
+
+.\.venv\Scripts\python.exe scripts\publish_phase_1b2a_status.py
+decision=PENDING; approval_id=05ab1c98a352f49e6e36e92a42503895ca536a8659a3aec62fe36d7543de3632; equivalence=INSUFFICIENT_EVIDENCE; published_manifest_count=0; published_fact_count=0
+
+.\.venv\Scripts\python.exe -m pytest <focused V2 tests> -q
+21 passed in 0.09s
+
+.\.venv\Scripts\python.exe -m pytest -q
+309 passed in 9.68s
+
+.\.venv\Scripts\python.exe scripts\verify_standalone.py
+PASS forbidden imports: 0
+PASS forbidden active paths/dependencies: 0
+PASS prohibited repository inventory: 0
+PASS phase 1a architecture boundary violations: 0
+
+.\.venv\Scripts\python.exe scripts\clean_room_acceptance.py
+clean_room_dependencies=true; clean_room_install=true; clean_room_tests=true; build=true; wheel_install=true; wheel_smoke=true; zero_dependency_acceptance=true
+clean-room test_output: 309 passed in 107.05s (0:01:47)
+
+credential scan using local DATAHUB_API_KEY and TUSHARE_TOKEN values as sentinels
+CREDENTIAL_SCAN_FINDINGS=0
+
+git diff --check
+PASS (line-ending notices only; no whitespace errors)
+```

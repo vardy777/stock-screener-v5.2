@@ -14,11 +14,16 @@ from v5_2.data.dataset_equivalence import DatasetEquivalenceDecision, DatasetEqu
 from v5_2.data.evidence import EvidenceArtifactV1, EvidenceStatus, EvidenceType, EvidenceValidityPolicy, EvidenceValidityRuleV1  # noqa: E402
 from v5_2.data.identity import canonical_json, content_hash  # noqa: E402
 from v5_2.data.source_approval import SourceApprovalArtifactV1  # noqa: E402
+from v5_2.data.real_audits.pinned_artifacts import load_pinned_json  # noqa: E402
 
 
 RUNTIME = ROOT / "data" / "phase_1b2a"
 GOVERNANCE = RUNTIME / "governance"
 NOW = datetime(2026, 9, 7, 6, 30, tzinfo=timezone.utc)
+AUDIT_ID = "23fb236fd6d1fdf7e0691c3bf3bfb8db3cf5524f13bcddb510bd21fbc52e03b7"
+CLASSIFICATION_ID = "34612813c3bfdeb233bf41b66796a9ca9e89751062523ca7be30fc4c76f56420"
+REPLAY_ID = "649f082492e47bf6a8fbfe8921276ed31b706a8a8276b84fbd7396a778cc62b7"
+LEDGER_ID = "0f6772947b821a5819614c652d08544ac8bc14b789b796eb0f4338f71c79e473"
 
 
 def _latest(prefix):
@@ -61,9 +66,15 @@ def build_status_equivalence(*, classification, audit, replay, raw_hashes):
 
 
 def main() -> int:
-    audit_path, audit = _latest("status-audit")
-    classification_path, classification = _latest("missing-bar-classification")
-    replay_path, replay = _latest("status-replay")
+    audit_path = GOVERNANCE / f"status-audit-{AUDIT_ID}.json"
+    classification_path = GOVERNANCE / f"missing-bar-classification-{CLASSIFICATION_ID}.json"
+    replay_path = GOVERNANCE / f"status-replay-{REPLAY_ID}.json"
+    audit = load_pinned_json(audit_path, schema_version="Phase1B2AStatusAuditV1",
+                             identity_field="evidence_id", expected_identity=AUDIT_ID)
+    classification = load_pinned_json(classification_path, schema_version="MissingBarClassificationArtifactV2",
+                                      identity_field="content_hash", expected_identity=CLASSIFICATION_ID)
+    replay = load_pinned_json(replay_path, schema_version="StatusRealReplayEvidenceV1",
+                              identity_field="evidence_id", expected_identity=REPLAY_ID)
     raw_hashes = tuple(audit["raw_payload_hashes"])
     source_version = content_hash(raw_hashes)
     inputs = tuple(sorted((audit["evidence_id"], classification["content_hash"], replay["evidence_id"])))
@@ -72,7 +83,9 @@ def main() -> int:
     )
     gate = json.loads((GOVERNANCE / "status-gate-evaluation-v2.json").read_text(encoding="utf-8"))
     if gate["cross_source_status"] == "FAIL":
-        prospective_path, prospective = _latest("prospective-status-evidence-ledger")
+        prospective_path = GOVERNANCE / f"prospective-status-evidence-ledger-v2-{LEDGER_ID}.json"
+        prospective = load_pinned_json(prospective_path, schema_version="ProspectiveStatusEvidenceLedgerV2",
+            identity_field="content_hash", expected_identity=LEDGER_ID)
         equivalence = replace(equivalence, decision=DatasetEquivalenceDecision.NOT_EQUIVALENT)
         equivalence = replace(equivalence, evidence_id=content_hash({
             **{field.name: getattr(equivalence, field.name) for field in fields(equivalence)
