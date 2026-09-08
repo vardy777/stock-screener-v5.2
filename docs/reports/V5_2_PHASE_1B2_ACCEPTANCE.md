@@ -333,3 +333,118 @@ CREDENTIAL_SCAN_FINDINGS=0
 ```
 
 Remaining blockers are concrete: 60 frozen sample entries still lack exact independent evidence; `002525.SZ` remains unresolved; and no complete artifact proves each semantic's knowledge time relative to the 16:30 cutoff. Phase 1B-2B and all prohibited downstream work remain untouched.
+
+## Phase 1B-2A Final Closure — 2026-09-08
+
+Starting GitHub HEAD: `8ec00395a9cd3d282df772f5e9613a41fbde3a72`.
+
+No frozen acquisition, 89-record exception audit, exception budget, 61-entry inventory, 600747.SH supplement, or approved daily-bar request was repeated.
+
+### Historical universe
+
+`NeverConfirmedTradableExclusionV1` now applies only when an identity has no approved daily bar, no verified trading session, and no reliable proof of actual historical tradability. It preserves source-record IDs, absence-of-trading evidence, reason, research impact, and content hash. Any positive trading proof makes construction fail.
+
+`002525.SZ` is explicitly retained and classified `NEVER_CONFIRMED_TRADABLE`, with `research_eligible=false` and `survivorship_blocking=false`. Planned listing/code allocation is regression-tested as not equivalent to an actual first tradable session. The existing 600747.SH supplement is unchanged.
+
+```text
+TOTAL = 542
+NON_TARGET = 539
+NEVER_CONFIRMED_TRADABLE = 1
+LEGACY_CODE = 1
+TARGET_A_SHARE_REQUIRED = 1
+UNRESOLVED = 0
+SUPPLEMENT = 1
+SURVIVORSHIP = PASS
+```
+
+Reconciliation artifact: `a5ab86ff4fc0fbc84e3d5f06dbcb1bf51a123dd2e900246404b795d5e1149613`.
+
+### Frozen 61-case independent evidence
+
+A deterministic BaoStock exact-security/exact-session retrieval was executed for all 56 unique events. The evidence artifact records provider identity, retrieval method, semantic suitability, independence rationale, rows, per-event disposition, and content hashes.
+
+Independent evidence artifact: `b4b7cc0ed61ce18751675612f4cf7f8f667b44025f50c915a1211c8988a8015a`.
+
+```text
+61 ENTRIES / 56 UNIQUE EVENTS
+MATCH = 30
+MISMATCH = 0
+UNRESOLVED = 2
+INDEPENDENT_EVIDENCE_UNAVAILABLE = 29
+LEDGER = c60ad6a427a67e8c335bc9914e04e3369e11f645a4f7487c756201407b76da66
+CROSS_SOURCE = PENDING
+```
+
+The 29 unavailable cases are frozen ordinary-stratum securities for which the independent source has no exact-session coverage. The two unresolved cases have a record but insufficient semantic mapping (ordinary status and identity transition). They were not rewritten as MATCH and no threshold was changed.
+
+### PIT knowledge time
+
+`StatusKnowledgeTimeObservationV1` records effective session, independent observation/source/reference/document hash, real publication fields when available, availability basis, derived `available_at`, 16:30 cutoff, D-cutoff usability, semantic mapping version, input IDs, and content hash. Regression tests enforce date-only next-session safety and `planned listing != actual tradable listing`.
+
+Thirty independently matched entries produced knowledge-time observations, all usable at the D cutoff through `MARKET_OBSERVABLE_BY_CLOSE`. Bundle `2edb43de6b3c795173b7d740a1e2665ff7371e0c04fc489a4f4425568a1963ad` is explicitly `complete=false` and `pit_evidence_published=false`. Missing resumption and other acceptance-scope proof means `pit_evidence=None` remains correct.
+
+### Final gate and publication
+
+```text
+PIT KNOWLEDGE TIME = PENDING
+CROSS SOURCE = PENDING
+SURVIVORSHIP = PASS
+EXCEPTION BUDGET = PASS
+SYSTEMATIC DEFECT = PASS
+
+SOURCE APPROVAL = PENDING
+PUBLICATION_ALLOWED = false
+APPROVED STATUS FACTS = 0
+DATASET MANIFEST = 0
+PHASE 1B-2A = FAIL CLOSED / PENDING EVIDENCE
+
+PHASE 1B-2 overall = FAIL
+HISTORICAL PIT DATA = FAIL
+READY FOR LABEL ENGINE = NO
+```
+
+### Commands and exact results
+
+```text
+.\.venv\Scripts\python.exe scripts\reconcile_phase_1b2a_universe.py
+total=542; NON_TARGET=539; NEVER_CONFIRMED_TRADABLE=1; LEGACY_CODE=1; TARGET_A_SHARE_REQUIRED=1; UNRESOLVED=0; supplement_count=1
+
+.\.venv\Scripts\python.exe scripts\acquire_baostock_status_audit.py
+unique_events=56; MATCH=25; MISMATCH=0; UNRESOLVED=2; INDEPENDENT_EVIDENCE_UNAVAILABLE=29; evidence_id=b4b7cc0ed61ce18751675612f4cf7f8f667b44025f50c915a1211c8988a8015a
+
+.\.venv\Scripts\python.exe scripts\audit_phase_1b2a_official_samples.py
+entries=61; unique_events=56; MATCH=30; MISMATCH=0; UNRESOLVED=2; INDEPENDENT_EVIDENCE_UNAVAILABLE=29; ledger_id=c60ad6a427a67e8c335bc9914e04e3369e11f645a4f7487c756201407b76da66
+
+.\.venv\Scripts\python.exe scripts\build_phase_1b2a_knowledge_time.py
+observation_count=30; usable_at_D_cutoff=30; complete=false; pit_evidence_published=false; bundle_id=2edb43de6b3c795173b7d740a1e2665ff7371e0c04fc489a4f4425568a1963ad
+
+.\.venv\Scripts\python.exe scripts\evaluate_phase_1b2a_gates.py
+structural_status=PASS; pit_status=PENDING; cross_source_status=PENDING; survivorship_status=PASS; exception_budget_status=PASS; systematic_defect_status=PASS; decision=PENDING; publication_allowed=false
+
+.\.venv\Scripts\python.exe scripts\publish_phase_1b2a_status.py
+decision=PENDING; approval_id=05ab1c98a352f49e6e36e92a42503895ca536a8659a3aec62fe36d7543de3632; published_manifest_count=0; published_fact_count=0
+
+.\.venv\Scripts\python.exe -m pytest <focused final-closure tests> -q
+19 passed in 0.06s
+
+.\.venv\Scripts\python.exe -m pytest -q
+294 passed in 105.89s (0:01:45)
+
+.\.venv\Scripts\python.exe scripts\verify_standalone.py
+PASS forbidden imports: 0
+PASS forbidden active paths/dependencies: 0
+PASS prohibited repository inventory: 0
+PASS phase 1a architecture boundary violations: 0
+
+git diff --check
+PASS (no output)
+
+.\.venv\Scripts\python.exe scripts\clean_room_acceptance.py
+clean_room_dependencies=true; clean_room_install=true; clean_room_tests=true; build=true; wheel_install=true; wheel_smoke=true; zero_dependency_acceptance=true
+clean-room test_output: 294 passed in 111.13s (0:01:51)
+
+credential scan using the actual local DATAHUB_API_KEY as a sentinel across repository runtime areas
+CREDENTIAL_SCAN_FINDINGS=0
+```
+
+STOP: the remaining evidence gap is bounded to 29 independently unavailable entries, two semantic-mapping-unresolved entries, and incomplete acceptance-scope PIT proof. No later phase was started.
