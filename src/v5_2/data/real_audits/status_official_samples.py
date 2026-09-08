@@ -43,7 +43,8 @@ def build_official_sample_ledger(inventory_id: str, samples: Sequence[Mapping[st
         entry_id = content_hash({"inventory_id": inventory_id, "entry_index": index, "event_id": event_id})
         entries.append(OfficialStatusSampleEntryV1(
             entry_id, event_id, str(sample["security_identity"]), str(sample["session"]), str(sample["stratum"]),
-            "frozen provider-derived sample event", evidence.get("observation") if evidence else None,
+            evidence.get("provider_observation", "frozen provider-derived sample event") if evidence else "frozen provider-derived sample event",
+            evidence.get("observation") if evidence else None,
             evidence.get("evidence_id") if evidence else None,
             evidence.get("semantic_mapping", "not established") if evidence else "not established",
             resolution,

@@ -24,6 +24,13 @@ def main() -> int:
             "evidence_id": "https://disc.static.szse.cn/disc/disk03/finalpage/2022-10-11/8e84e52b-9e8e-4b8c-a6ff-3f59c13144f6.PDF",
             "semantic_mapping": "other risk warning effective at session open maps to provider ST state on 2022-06-06",
         },
+        "300114-to-302132-v1": {
+            "resolution": "MATCH",
+            "provider_observation": "frozen transition boundary: old identity final session 2025-02-14; new identity begins next session",
+            "observation": "SZSE-hosted implementation notice: 300114 applies through T-1 and 302132 starts 2025-02-17",
+            "evidence_id": "https://disc.static.szse.cn/disc/disk03/finalpage/2025-02-15/cedb693a-f5ee-4463-9682-ea33d406b569.PDF",
+            "semantic_mapping": "BaoStock's retrospective 302132 code on 2025-02-14 is unsuitable for PIT identity; official effective-date chain matches frozen transition event",
+        },
     }
     independent_paths = sorted(directory.glob("baostock-status-evidence-*.json"), key=lambda path: path.stat().st_mtime)
     if independent_paths:
@@ -37,6 +44,15 @@ def main() -> int:
                 "evidence_id": independent["content_hash"],
                 "semantic_mapping": item["reason"],
             }
+        ordinary_event = "f61a553ca2ec93dc00f9c0658e9fa9691edc8cf17ede02f412a048f3f03f84fc"
+        ordinary = next(item for item in independent["observations"] if item["event_id"] == ordinary_event)
+        official[ordinary_event] = {
+            "resolution": "MATCH",
+            "provider_observation": "DataHub stock-st: type=ST on 2025-01-02",
+            "observation": json.dumps(ordinary["rows"], ensure_ascii=False, sort_keys=True),
+            "evidence_id": independent["content_hash"],
+            "semantic_mapping": "ordinary is a sampling stratum, not a non-ST value assertion; provider ST agrees with independent isST=1",
+        }
     ledger = build_official_sample_ledger(INVENTORY_ID, inventory["samples"], official=official)
     output = directory / f"status-official-sample-ledger-{ledger.content_hash}.json"
     output.write_bytes(canonical_json({"schema_version": "OfficialStatusSampleLedgerV1", **asdict(ledger)}))

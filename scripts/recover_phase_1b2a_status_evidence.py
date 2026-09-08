@@ -20,7 +20,9 @@ INVENTORY_ID = "7ca99bfecd2731d5442ea62eb496afe3cff9b01a7ba32c1434a461c1a931a9c0
 def main() -> int:
     runtime = ROOT / "data" / "phase_1b2a"
     inventory = json.loads((runtime / "governance" / f"status-sample-inventory-{INVENTORY_ID}.json").read_text(encoding="utf-8"))
-    samples = {item["event_id"]: item for item in inventory["samples"] if item["stratum"] == "st_transition"}
+    extra = "f61a553ca2ec93dc00f9c0658e9fa9691edc8cf17ede02f412a048f3f03f84fc"
+    samples = {item["event_id"]: item for item in inventory["samples"]
+               if item["stratum"] == "st_transition" or item["event_id"] == extra}
     credential = load_datahub_credential(env={}, env_file=ROOT / ".env", repository_root=ROOT)
     client, store = DataHubClient(transport=DataHubHttpTransport(timeout_seconds=30)), RawArtifactStore(runtime)
     observations = []

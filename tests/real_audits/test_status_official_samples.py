@@ -15,3 +15,12 @@ def test_missing_retrieval_is_unresolved_and_never_promoted_to_match() -> None:
     ledger = build_official_sample_ledger("inventory", samples, {})
     assert ledger.entries[0].resolution == "UNRESOLVED"
     assert ledger.systematic_defect is False
+
+
+def test_stratum_label_does_not_override_explicit_provider_and_independent_values() -> None:
+    sample = ({"event_id": "e", "security_identity": "300029.SZ", "session": "20250102", "stratum": "ordinary"},)
+    evidence = {"e": {"resolution": "MATCH", "provider_observation": "stock-st: ST",
+        "observation": "BaoStock isST=1", "evidence_id": "independent", "semantic_mapping": "daily ST state agrees"}}
+    entry = build_official_sample_ledger("inventory", sample, evidence).entries[0]
+    assert entry.provider_observation == "stock-st: ST"
+    assert entry.resolution == "MATCH"
