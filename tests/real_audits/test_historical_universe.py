@@ -1,4 +1,8 @@
-from v5_2.data.real_audits.historical_universe import reconcile_historical_universe
+import pytest
+
+from v5_2.data.real_audits.historical_universe import (
+    NeverConfirmedTradableExclusionV1, reconcile_historical_universe,
+)
 
 
 def test_reconciliation_classifies_target_non_target_outside_and_alias() -> None:
@@ -35,3 +39,27 @@ def test_evidence_backed_resolution_override_records_interval_and_research_impac
     assert item.category == "NON_TARGET"
     assert item.evidence_ids == ("bse-identity-430017",)
     assert item.research_scope_impact.startswith("BSE excluded")
+
+
+def test_planned_listing_without_trading_proof_is_explicitly_excluded_not_deleted() -> None:
+    exclusion = NeverConfirmedTradableExclusionV1.create(
+        security_identity="002525.SZ", observed_source_record_ids=("namechange-row",),
+        absence_of_trading_evidence_ids=("approved-daily-bar-inventory",),
+        has_approved_daily_bar=False, has_verified_trading_session=False,
+        has_reliable_tradability_proof=False,
+        reason="code allocated for planned listing but actual tradable listing was never confirmed",
+    )
+    assert exclusion.classification == "NEVER_CONFIRMED_TRADABLE"
+    assert exclusion.research_eligible is False
+    assert exclusion.survivorship_blocking is False
+    assert exclusion.content_hash
+
+
+def test_never_confirmed_rule_rejects_any_actual_trading_proof() -> None:
+    with pytest.raises(ValueError, match="cannot exclude"):
+        NeverConfirmedTradableExclusionV1.create(
+            security_identity="002525.SZ", observed_source_record_ids=("row",),
+            absence_of_trading_evidence_ids=("bars",), has_approved_daily_bar=True,
+            has_verified_trading_session=False, has_reliable_tradability_proof=False,
+            reason="planned listing",
+        )

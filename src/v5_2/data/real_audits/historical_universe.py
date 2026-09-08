@@ -10,6 +10,36 @@ TARGET_PREFIXES = {"SSE": ("600", "601", "603", "605", "688"),
 
 
 @dataclass(frozen=True, slots=True)
+class NeverConfirmedTradableExclusionV1:
+    security_identity: str
+    observed_source_record_ids: tuple[str, ...]
+    absence_of_trading_evidence_ids: tuple[str, ...]
+    classification: str
+    reason: str
+    effective_research_impact: str
+    research_eligible: bool
+    survivorship_blocking: bool
+    content_hash: str
+
+    @classmethod
+    def create(cls, *, security_identity, observed_source_record_ids, absence_of_trading_evidence_ids,
+               has_approved_daily_bar, has_verified_trading_session, has_reliable_tradability_proof, reason):
+        if has_approved_daily_bar or has_verified_trading_session or has_reliable_tradability_proof:
+            raise ValueError("cannot exclude an identity with actual trading proof")
+        observed = tuple(sorted(set(observed_source_record_ids)))
+        absence = tuple(sorted(set(absence_of_trading_evidence_ids)))
+        if not observed or not absence or not str(reason).strip():
+            raise ValueError("exclusion requires observed records, absence evidence, and reason")
+        body = {"schema_version": "NeverConfirmedTradableExclusionV1", "security_identity": security_identity,
+                "observed_source_record_ids": observed, "absence_of_trading_evidence_ids": absence,
+                "classification": "NEVER_CONFIRMED_TRADABLE", "reason": str(reason).strip(),
+                "effective_research_impact": "conservative exclusion from historical research universe",
+                "research_eligible": False, "survivorship_blocking": False}
+        values = {key: value for key, value in body.items() if key != "schema_version"}
+        return cls(**values, content_hash=content_hash(body))
+
+
+@dataclass(frozen=True, slots=True)
 class HistoricalUniverseReconciliationItemV1:
     security_identity: str
     category: str
@@ -64,7 +94,7 @@ def reconcile_historical_universe(*, observed_symbols, original_symbols, master_
             category = str(override["category"])
             if category not in {"TARGET_A_SHARE_REQUIRED", "NON_TARGET", "OUTSIDE_RESEARCH_COVERAGE",
                                 "IDENTITY_ALIAS", "EFFECTIVE_IDENTITY_ALREADY_PRESENT", "LEGACY_CODE",
-                                "LOCAL_EXCEPTION", "UNRESOLVED"}:
+                                "LOCAL_EXCEPTION", "NEVER_CONFIRMED_TRADABLE", "UNRESOLVED"}:
                 raise ValueError("invalid historical universe disposition")
             start, end = override.get("effective_from"), override.get("effective_to")
             evidence_ids = tuple(sorted(set(override.get("evidence_ids", ()))))

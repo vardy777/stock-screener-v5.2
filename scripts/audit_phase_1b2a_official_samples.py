@@ -25,6 +25,18 @@ def main() -> int:
             "semantic_mapping": "other risk warning effective at session open maps to provider ST state on 2022-06-06",
         },
     }
+    independent_paths = sorted(directory.glob("baostock-status-evidence-*.json"), key=lambda path: path.stat().st_mtime)
+    if independent_paths:
+        independent = json.loads(independent_paths[-1].read_text(encoding="utf-8"))
+        for item in independent["observations"]:
+            if item["event_id"] in official:
+                continue
+            official[item["event_id"]] = {
+                "resolution": item["resolution"],
+                "observation": json.dumps(item["rows"], ensure_ascii=False, sort_keys=True),
+                "evidence_id": independent["content_hash"],
+                "semantic_mapping": item["reason"],
+            }
     ledger = build_official_sample_ledger(INVENTORY_ID, inventory["samples"], official=official)
     output = directory / f"status-official-sample-ledger-{ledger.content_hash}.json"
     output.write_bytes(canonical_json({"schema_version": "OfficialStatusSampleLedgerV1", **asdict(ledger)}))

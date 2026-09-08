@@ -52,6 +52,7 @@ def test_missing_or_unavailable_evidence_is_pending_not_match() -> None:
     result = evaluate(official_ledger=ledger("OFFICIAL_REFERENCE_UNAVAILABLE"))
     assert result.cross_source_status == "PENDING"
     assert result.decision == "PENDING"
+    assert evaluate(official_ledger=ledger("INDEPENDENT_EVIDENCE_UNAVAILABLE")).decision == "PENDING"
 
 
 def test_confirmed_and_systematic_errors_are_rejected() -> None:

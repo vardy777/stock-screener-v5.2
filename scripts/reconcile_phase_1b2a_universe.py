@@ -10,7 +10,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from v5_2.data.identity import canonical_json  # noqa: E402
-from v5_2.data.real_audits.historical_universe import reconcile_historical_universe  # noqa: E402
+from v5_2.data.real_audits.historical_universe import (  # noqa: E402
+    NeverConfirmedTradableExclusionV1, reconcile_historical_universe,
+)
 
 
 P1 = ROOT / "data" / "phase_1b1"
@@ -54,6 +56,24 @@ def main() -> int:
                                           if symbol.endswith(".BJ") else
                                           "non-canonical temporary exchange identity excluded from target A-share universe"),
             }
+    symbol = "002525.SZ"
+    if symbol in observations:
+        slot = observations[symbol]
+        exclusion = NeverConfirmedTradableExclusionV1.create(
+            security_identity=symbol, observed_source_record_ids=tuple(slot["evidence"]),
+            absence_of_trading_evidence_ids=(UNIVERSE_ID,), has_approved_daily_bar=False,
+            has_verified_trading_session=False, has_reliable_tradability_proof=False,
+            reason="code allocation/planned listing traces exist, but no approved bar or verified actual trading session exists",
+        )
+        overrides[symbol] = {
+            "category": exclusion.classification,
+            "effective_from": min(slot["dates"]) if slot["dates"] else None,
+            "effective_to": max(slot["dates"]) if slot["dates"] else None,
+            "evidence_ids": (exclusion.content_hash,),
+            "research_scope_impact": exclusion.effective_research_impact,
+        }
+        exclusion_path = P2 / "governance" / f"never-confirmed-tradable-{exclusion.content_hash}.json"
+        exclusion_path.write_bytes(canonical_json(asdict(exclusion)))
     result = reconcile_historical_universe(
         observed_symbols=tuple(observed), original_symbols=tuple(universe["ordered_symbols"]),
         master_rows=master, aliases={"302132.SZ": "300114.SZ"},
