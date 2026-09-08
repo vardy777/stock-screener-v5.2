@@ -32,6 +32,8 @@ def test_datahub_endpoint_registry_is_dataset_scoped() -> None:
         "daily_bar": "daily",
         "risk_warning_history": "namechange",
         "suspension_history": "suspend-d",
+        "risk_warning_daily": "stock-st",
+        "risk_warning_events": "st",
     }
 
 

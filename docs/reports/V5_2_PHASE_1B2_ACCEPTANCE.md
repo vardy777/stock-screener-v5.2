@@ -124,6 +124,7 @@ CANDIDATE_CREDENTIAL_SCAN_FINDINGS=0
 
 git diff --check
 PASS (no output)
+
 ```
 
 ### Phase 1B-2A exit matrix
@@ -236,3 +237,99 @@ READY FOR LABEL ENGINE = NO
 ```
 
 STOP: no later phase was started. Remaining blockers are the 250 unresolved historical-universe identities, exact official evidence for the frozen 61 entries, and semantic application of that evidence to PIT availability.
+
+## Phase 1B-2A Evidence Recovery + Gate Integration — 2026-09-08
+
+Starting GitHub HEAD: `600fe3fb238c4f587241ac5f26b130c1ced0c3b0`.
+
+### Code repair
+
+`status_validation.py` now has an artifact-driven V2 gate evaluator. It verifies PIT evidence identity/scope, the complete cross-source disposition ledger, interval-aware historical reconciliation plus immutable supplement, exception-budget status, systematic-defect status, revocations, and content integrity. Approval/publication requires every gate to pass. Missing evidence and unresolved/unavailable dispositions produce `PENDING`; confirmed invalid evidence, mismatch, systematic defects, tampering, revocation, source mismatch, or structural failure produce `REJECTED`. The legacy structural validator no longer hard-codes PIT to `FAIL`.
+
+Focused TDD explicitly covers a complete PASS path; missing PIT evidence; unavailable official evidence; mismatch; systematic defect; unresolved historical identity; revoked ledger; tampered ledger; and wrong source-version PIT evidence. Old incomplete artifacts remain non-approving.
+
+### Evidence recovery
+
+- DataHub endpoint probes confirmed `stock-st`, `stock_st`, and `st` return code 0. Only the canonical dataset-scoped `stock-st` and `st` routes were allowlisted.
+- `stock-st` fields: `ts_code,name,trade_date,type,type_name`; `st` fields: `ts_code,name,pub_date,imp_date,st_type,st_reason,st_explain`.
+- Evidence-only acquisition for the ten frozen ST-transition events issued 20 immutable requests and stored 54 rows. Diagnostic `218a44544afb60355f1e9eb3f1b35949cbfd3484f86473fcb5cbc6b104f5e2de`. These endpoints are the same provider boundary and therefore are not independent cross-source evidence.
+- A representative official path was proven for frozen event `002699.SZ / 2022-06-06`: a SZSE-hosted issuer record states that other-risk-warning status took effect from that session's open. The exact event is `MATCH`; the source is `https://disc.static.szse.cn/disc/disk03/finalpage/2022-10-11/8e84e52b-9e8e-4b8c-a6ff-3f59c13144f6.PDF`.
+- Frozen inventory remains 61 entries / 56 unique events. Ledger `1d58ed16ba552404273b427a3d45ce1b20eff89c777a2fb8730164a497e00a6e`: `MATCH=1`, `MISMATCH=0`, `UNRESOLVED=60`, `OFFICIAL_REFERENCE_UNAVAILABLE=0`. Missing retrieval is now correctly represented as `UNRESOLVED`, not falsely asserted unavailable.
+
+### Historical-universe recovery
+
+The exact 542-key inventory is unchanged. Existing dispositions were retained, then 248 `.BJ` identities were resolved as outside the frozen SSE/SZSE A-share scope using their immutable raw status observations; `X19363.SH` was resolved as a non-canonical legacy code. Each resolution records its observed effective interval, payload evidence IDs, and research-scope impact.
+
+```text
+TOTAL = 542
+NON_TARGET = 539
+LEGACY_CODE = 1
+TARGET_A_SHARE_REQUIRED = 1 (600747.SH)
+UNRESOLVED = 1 (002525.SZ)
+SUPPLEMENT = 1 (600747.SH)
+```
+
+Reconciliation `03247cdb2b68956172d05c011f96a5f463116f5e4de007b8f88a7ff1b7cc8b16`; supplement `d67d886299be85bb5585c9103140ef327fe13b78161903f7e5120646a8ee9e8f`. `002525.SZ` returned no row from the provider security-master query and could not be authoritatively classified in this iteration, so survivorship remains `PENDING`.
+
+### Actual integrated decision
+
+```text
+STRUCTURAL = PASS
+PIT = PENDING
+CROSS_SOURCE = PENDING
+SURVIVORSHIP = PENDING
+EXCEPTION_BUDGET = PASS
+SYSTEMATIC_DEFECT = PASS
+
+SOURCE APPROVAL = PENDING
+APPROVAL_ID = 05ab1c98a352f49e6e36e92a42503895ca536a8659a3aec62fe36d7543de3632
+PUBLICATION_ALLOWED = false
+APPROVED STATUS FACTS = 0
+DATASET MANIFEST = 0
+PHASE 1B-2A = FAIL CLOSED / PENDING EVIDENCE
+```
+
+The `PENDING` result reflects insufficient proof, not a confirmed provider error. The previous `REJECTED` artifact remains immutable historical evidence; no old artifact was edited.
+
+### Commands and exact results
+
+```text
+.\.venv\Scripts\python.exe scripts\recover_phase_1b2a_status_evidence.py
+events=10; requests=20; rows=54; diagnostic_id=218a44544afb60355f1e9eb3f1b35949cbfd3484f86473fcb5cbc6b104f5e2de; cross_source_eligible=false
+
+.\.venv\Scripts\python.exe scripts\reconcile_phase_1b2a_universe.py
+total=542; NON_TARGET=539; LEGACY_CODE=1; TARGET_A_SHARE_REQUIRED=1; UNRESOLVED=1; supplement_count=1
+
+.\.venv\Scripts\python.exe scripts\audit_phase_1b2a_official_samples.py
+entries=61; unique_events=56; MATCH=1; UNRESOLVED=60; systematic_defect=false; ledger_id=1d58ed16ba552404273b427a3d45ce1b20eff89c777a2fb8730164a497e00a6e
+
+.\.venv\Scripts\python.exe scripts\evaluate_phase_1b2a_gates.py
+structural_status=PASS; pit_status=PENDING; cross_source_status=PENDING; survivorship_status=PENDING; exception_budget_status=PASS; systematic_defect_status=PASS; decision=PENDING; publication_allowed=false
+
+.\.venv\Scripts\python.exe scripts\publish_phase_1b2a_status.py
+decision=PENDING; approval_id=05ab1c98a352f49e6e36e92a42503895ca536a8659a3aec62fe36d7543de3632; equivalence=INSUFFICIENT_EVIDENCE; published_manifest_count=0; published_fact_count=0
+
+.\.venv\Scripts\python.exe -m pytest <focused gate/evidence/provider tests> -q
+9 passed in 0.05s
+
+.\.venv\Scripts\python.exe -m pytest -q
+289 passed in 9.37s
+
+.\.venv\Scripts\python.exe scripts\verify_standalone.py
+PASS forbidden imports: 0
+PASS forbidden active paths/dependencies: 0
+PASS prohibited repository inventory: 0
+PASS phase 1a architecture boundary violations: 0
+
+git diff --check
+PASS (no output)
+
+.\.venv\Scripts\python.exe scripts\clean_room_acceptance.py
+clean_room_dependencies=true; clean_room_install=true; clean_room_tests=true; build=true; wheel_install=true; wheel_smoke=true; zero_dependency_acceptance=true
+clean-room test_output: 289 passed in 110.78s (0:01:50)
+
+credential scan using the actual local DATAHUB_API_KEY as a sentinel across repository runtime areas
+CREDENTIAL_SCAN_FINDINGS=0
+```
+
+Remaining blockers are concrete: 60 frozen sample entries still lack exact independent evidence; `002525.SZ` remains unresolved; and no complete artifact proves each semantic's knowledge time relative to the 16:30 cutoff. Phase 1B-2B and all prohibited downstream work remain untouched.
