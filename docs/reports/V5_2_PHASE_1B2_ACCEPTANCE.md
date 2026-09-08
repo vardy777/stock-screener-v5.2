@@ -310,7 +310,7 @@ structural_status=PASS; pit_status=PENDING; cross_source_status=PENDING; survivo
 decision=PENDING; approval_id=05ab1c98a352f49e6e36e92a42503895ca536a8659a3aec62fe36d7543de3632; equivalence=INSUFFICIENT_EVIDENCE; published_manifest_count=0; published_fact_count=0
 
 .\.venv\Scripts\python.exe -m pytest <focused gate/evidence/provider tests> -q
-9 passed in 0.05s
+39 passed in 0.11s
 
 .\.venv\Scripts\python.exe -m pytest -q
 289 passed in 9.37s
