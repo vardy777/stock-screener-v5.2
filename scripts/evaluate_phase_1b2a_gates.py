@@ -19,7 +19,7 @@ from v5_2.data.real_audits.status_validation import evaluate_status_gates  # noq
 from v5_2.data.real_audits.pinned_artifacts import load_pinned_json  # noqa: E402
 
 INVENTORY_ID = "cef91ec0a055f01ac2f0f82ec8e15ce75f4e000acd2123a70685fb25d1df3c9c"
-LEDGER_ID = "0f6772947b821a5819614c652d08544ac8bc14b789b796eb0f4338f71c79e473"
+LEDGER_ID = "d5c80b3e38a4d459dba53eab37cccecfecffad3bbdea95511140c71be7315e99"
 UNIVERSE_ID = "a5ab86ff4fc0fbc84e3d5f06dbcb1bf51a123dd2e900246404b795d5e1149613"
 EXCEPTION_ID = "5e54d212b5f67b5a7d450698c72a71cebae1aa143cb173cb81883528f51f381d"
 AUDIT_ID = "23fb236fd6d1fdf7e0691c3bf3bfb8db3cf5524f13bcddb510bd21fbc52e03b7"
@@ -42,7 +42,8 @@ def main() -> int:
         security_identity=item["security_identity"], session=item["session"], stratum=item["semantic"],
         provider_observation=item["provider_value"],
         official_observation=str(observations[item["candidate_hash"]].get("independent_value")),
-        official_evidence_id=observations[item["candidate_hash"]].get("source_document_hash"),
+        official_evidence_id=(observations[item["candidate_hash"]].get("official_anchor_evidence_id")
+                              or observations[item["candidate_hash"]].get("source_document_hash")),
         semantic_mapping=item["semantic_assertion"],
         resolution=observations[item["candidate_hash"]]["resolution"],
     ) for item in inventory["samples"])

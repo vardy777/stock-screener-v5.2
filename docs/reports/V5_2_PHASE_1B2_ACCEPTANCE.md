@@ -757,3 +757,122 @@ CREDENTIAL_SCAN_FINDINGS=0
 git diff --check
 PASS (line-ending notices only; no whitespace errors)
 ```
+
+## Phase 1B-2A Official Anchor Closure — 2026-09-09
+
+Starting HEAD: `0bf7c87ddc51c88c8958fa7e35d51c609037ff11`.
+
+V1 remains permanently failed. The frozen V2 contract, inventory, candidate hashes,
+71 samples, strata, and threshold were not changed or reinterpreted:
+
+```text
+V2 contract_id = 3a9efd2f1047d9ad0432a72202bf1b8e7f926d153c339106475c37a694b20917
+V2 inventory_id = cef91ec0a055f01ac2f0f82ec8e15ce75f4e000acd2123a70685fb25d1df3c9c
+V2 freeze_commit = 53578aa7e50d151eb292472bfed2fd532fdb4748
+V2 original ledger_id = 0f6772947b821a5819614c652d08544ac8bc14b789b796eb0f4338f71c79e473
+```
+
+The content-addressed `OfficialAnchorGapInventoryV1` is
+`5466d1c98a2c2dbae5219ebd3e62512c3d33d96ef12f07f4771c3d46440cb4b9`.
+It binds exactly 19 existing frozen candidates: 10 `ACTUAL_FIRST_TRADABLE_SESSION`
+and 9 `DELISTING_BOUNDARY`. No sample was replaced or added.
+
+The bounded SSE/SZSE/exchange-hosted/CNINFO retrieval produced official-anchor
+supplement `806fb76ff4a4afe94c4e4c6382121d3685b04cee9487959c8bec8781d2caf733`:
+
+```text
+recovered MATCH = 18
+OFFICIAL_MISMATCH = 0
+OFFICIAL_ANCHOR_UNAVAILABLE = 1
+```
+
+Every recovered entry pins its candidate hash, identity, session, semantic, source
+URL, document title, publication date, retrieved-content SHA-256, and evidence ID.
+The complete per-entry evidence and hashes are in the immutable supplement artifact.
+The sole remaining blocker is:
+
+```text
+identity = 688053.SH
+session = 20220708
+semantic = ACTUAL_FIRST_TRADABLE_SESSION
+resolution = OFFICIAL_ANCHOR_UNAVAILABLE
+evidence_id = 6df8af5f3c8a8e9105c08d849fdd150e7449fca625d094a408709d31cecf338b
+reason = exact listing announcement was discoverable in third-party mirrors, but
+         the bounded run did not recover an exchange/CNINFO-hosted immutable copy
+```
+
+Third-party mirror content was not promoted to an official anchor. The final V2
+ledger is `d5c80b3e38a4d459dba53eab37cccecfecffad3bbdea95511140c71be7315e99`:
+
+```text
+TOTAL = 71
+MATCH = 70
+MISMATCH = 0
+INDEPENDENT_EVIDENCE_UNAVAILABLE = 1
+CROSS_SOURCE = PENDING
+```
+
+Because the frozen contract requires 71/71 MATCH, PIT Final Closure was not entered.
+No `StatusPITKnowledgeTimeEvidenceV1` PASS artifact was created. The existing
+`StatusAvailabilityPolicyV2` and historical 16:30 Asia/Shanghai cutoff were not
+changed. The real gate remains fail-closed:
+
+```text
+STRUCTURAL = PASS
+PIT = PENDING
+CROSS_SOURCE = PENDING
+SURVIVORSHIP = PASS
+EXCEPTION_BUDGET = PASS
+SYSTEMATIC_DEFECT = PASS
+SOURCE_APPROVAL = PENDING
+PUBLICATION_ALLOWED = false
+APPROVED_FACTS = 0
+DATASET_MANIFEST = 0
+```
+
+No V3, resampling, threshold change, scheduler, 1B-2B work, or downstream research
+work was created.
+
+### Verification commands and exact results
+
+```text
+.\.venv\Scripts\python.exe scripts\freeze_phase_1b2a_official_anchor_gaps.py
+gap_inventory_id=5466d1c98a2c2dbae5219ebd3e62512c3d33d96ef12f07f4771c3d46440cb4b9; total=19; ACTUAL_FIRST_TRADABLE_SESSION=10; DELISTING_BOUNDARY=9
+
+.\.venv\Scripts\python.exe scripts\acquire_phase_1b2a_official_anchors.py
+supplement_id=806fb76ff4a4afe94c4e4c6382121d3685b04cee9487959c8bec8781d2caf733; MATCH=18; OFFICIAL_MISMATCH=0; OFFICIAL_ANCHOR_UNAVAILABLE=1
+
+.\.venv\Scripts\python.exe scripts\reevaluate_phase_1b2a_official_anchors.py
+total=71; MATCH=70; MISMATCH=0; INDEPENDENT_EVIDENCE_UNAVAILABLE=1; CROSS_SOURCE=PENDING; ledger_id=d5c80b3e38a4d459dba53eab37cccecfecffad3bbdea95511140c71be7315e99
+
+.\.venv\Scripts\python.exe scripts\evaluate_phase_1b2a_gates.py
+STRUCTURAL=PASS; PIT=PENDING; CROSS_SOURCE=PENDING; SURVIVORSHIP=PASS; EXCEPTION_BUDGET=PASS; SYSTEMATIC_DEFECT=PASS; decision=PENDING; publication_allowed=false
+
+.\.venv\Scripts\python.exe scripts\publish_phase_1b2a_status.py
+decision=PENDING; approved facts=0; DatasetManifest=0
+
+.\.venv\Scripts\python.exe -m pytest tests/real_audits/test_official_anchor_gaps.py tests/real_audits/test_status_cross_source.py tests/real_audits/test_status_gate_integration.py tests/real_audits/test_status_approval.py -q
+14 passed in 0.06s
+
+.\.venv\Scripts\python.exe -m pytest -q
+313 passed in 10.82s
+
+.\.venv\Scripts\python.exe scripts\verify_standalone.py
+PASS forbidden imports: 0
+PASS forbidden active paths/dependencies: 0
+PASS prohibited repository inventory: 0
+PASS phase 1a architecture boundary violations: 0
+
+.\.venv\Scripts\python.exe -m build
+Successfully built stock_screener_v5_2-5.2.0.tar.gz and stock_screener_v5_2-5.2.0-py3-none-any.whl
+
+.\.venv\Scripts\python.exe scripts\clean_room_acceptance.py
+clean_room_dependencies=true; clean_room_install=true; clean_room_tests=true; build=true; wheel_install=true; wheel_smoke=true; old_pythonpath_removed=true; zero_dependency_acceptance=true
+clean-room test_output: 313 passed in 110.44s (0:01:50)
+
+credential scan using local DATAHUB_API_KEY and TUSHARE_TOKEN values as sentinels
+CREDENTIAL_SCAN_FINDINGS=0; ENV_TRACKED=NO; .env ignored by .gitignore:9
+
+git diff --check
+PASS (line-ending notice only; no whitespace errors)
+```
