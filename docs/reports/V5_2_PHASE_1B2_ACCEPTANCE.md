@@ -448,3 +448,115 @@ CREDENTIAL_SCAN_FINDINGS=0
 ```
 
 STOP: the remaining evidence gap is bounded to 29 independently unavailable entries, two semantic-mapping-unresolved entries, and incomplete acceptance-scope PIT proof. No later phase was started.
+
+## Phase 1B-2A Evidence Sufficiency Review — 2026-09-08
+
+Starting HEAD: `55b7483897adc52d5d4a2cdddd156338a61833b2`.
+
+### Final resolution of the two semantic cases
+
+1. Event `f61a553ca2ec93dc00f9c0658e9fa9691edc8cf17ede02f412a048f3f03f84fc`, `300029.SZ`, session `20250102`: DataHub `stock-st` reports `type=ST`; BaoStock reports `tradestatus=1,isST=1`. The divergence was the interpretation of `ordinary` as a non-ST value even though it is only the frozen sampling-stratum label. Disposition: `MAPPING_ERROR_FIXED_MATCH`, not a mismatch. Evidence: recovery diagnostic `e860cfcbbb228c46c937e3adde5ae4360381e6dab9282878516593178cf0659d` and independent evidence `bb406f3768c8f568dc582307897ffc76c00727deb592105c87cee0e45e9f7a2d`.
+2. Event `300114-to-302132-v1`, `302132.SZ`, session `20250214`: BaoStock retrospectively labels the record `302132`, while the SZSE-hosted implementation notice states that old code `300114` applies through T-1 and new code `302132` begins on `2025-02-17`. BaoStock's value is unsuitable for PIT identity mapping; the official effective chain matches the frozen transition boundary. Disposition: `MAPPING_ERROR_FIXED_MATCH`, not a provider mismatch. Official evidence: `https://disc.static.szse.cn/disc/disk03/finalpage/2025-02-15/cedb693a-f5ee-4463-9682-ea33d406b569.PDF`.
+
+The ledger builder now regression-tests that a stratum label cannot overwrite explicit provider and independent values.
+
+### Final 29-entry coverage ledger
+
+Review artifact `afb939daf6f13d1d91a2de0513b59fabeaa71cd3430b58c9f97602873971976c` contains all 29 entries individually, including event ID, identity, session, attempted source/method, independent evidence ID, security-master evidence ID, delisting date, unavailable reason, systematic coverage class, research impact, and content hash.
+
+All 29 are the same applicability defect: the frozen ordinary stratum selected later-delisted identities at fixed session `2025-01-02`; every identity had delisted between `2003-09-22` and `2024-06-26`. BaoStock exact-security/exact-session lookup therefore correctly returned no row. No applicable exchange daily trading-status record should exist after delisting. This is not a value mismatch, but these cases cannot validate active ordinary-status equivalence.
+
+```text
+61 FROZEN ENTRIES / 56 UNIQUE EVENTS
+MATCH = 32
+MISMATCH = 0
+UNRESOLVED = 0
+INDEPENDENT_EVIDENCE_UNAVAILABLE = 29
+LEDGER = c37fbce55f6f6ceaf8dc89bbeca762b63869fa97c3a8bd5067fdedc8803344cd
+```
+
+### Evidence Sufficiency Policy decision
+
+The old frozen contract requires complete independent resolution and is not satisfied. It was not modified. A prospective `Evidence Sufficiency Policy Proposal V1` was written at `docs/superpowers/specs/2026-09-08-phase-1b2a-evidence-sufficiency-policy-proposal.md`; status is `PROPOSED — NOT ADOPTED`.
+
+The proposal does not use a matched percentage. It requires a newly preregistered deterministic inventory with explicit provider values, valid tradable identity/session pairs, separate high-risk semantic strata, official identity/listing/delisting anchors, independent daily observations, zero unexplained mismatches, and pre-observation applicability rules. It preserves the old ledger and requires ChatGPT acceptance before any replacement contract is used.
+
+### PIT coverage matrix
+
+```text
+listing             = PENDING; planned/approved listing is not actual first tradable session; frozen evidence has no actual-listing case
+delisting           = PARTIAL; five unique effective boundaries observed, announcement knowledge incomplete
+ST enter            = SAFE_WITH_RULE; ten daily states observable by D close
+ST exit             = SAFE_WITH_RULE; D state observable by close, interval-end date remains next-session-safe until observed
+suspension          = SAFE_WITH_RULE; ten full-day states independently observable by D close
+resumption          = SAFE_WITH_RULE; actual D trading observable by close; no D-1 forecast without notice
+identity transition = SAFE_WITH_RULE; official chain prevents overlap and retrospective code backfill
+ordinary status     = PENDING; 29 post-delisting samples do not test active ordinary status
+```
+
+The existing 30 knowledge-time observations remain valid sample-level evidence. They do not establish semantic-level completeness or full historical coverage. Bundle `d4e050e28ff6b6b85b5fecc3a126d53068d15c90813bca98a12943f61591c152` remains `complete=false`, `pit_evidence_published=false`; therefore `pit_evidence=None` and PIT=PENDING remain correct.
+
+### Final decision
+
+```text
+PIT KNOWLEDGE TIME = PENDING
+CROSS SOURCE = PENDING
+SURVIVORSHIP = PASS
+EXCEPTION BUDGET = PASS
+SYSTEMATIC DEFECT = PASS
+
+SOURCE APPROVAL = PENDING
+PUBLICATION_ALLOWED = false
+APPROVED STATUS FACTS = 0
+DATASET MANIFEST = 0
+PHASE 1B-2A = FAIL CLOSED / PENDING EVIDENCE
+```
+
+This is exit result B. No PIT PASS artifact, approved facts, or DatasetManifest was created. STOP pending review of the proposed prospective policy.
+
+### Verification commands and exact results
+
+```text
+.\.venv\Scripts\python.exe scripts\recover_phase_1b2a_status_evidence.py
+events=11; requests=22; rows=61; diagnostic_id=e860cfcbbb228c46c937e3adde5ae4360381e6dab9282878516593178cf0659d; cross_source_eligible=false
+
+.\.venv\Scripts\python.exe scripts\acquire_baostock_status_audit.py
+unique_events=56; MATCH=25; MISMATCH=0; UNRESOLVED=2; INDEPENDENT_EVIDENCE_UNAVAILABLE=29; evidence_id=bb406f3768c8f568dc582307897ffc76c00727deb592105c87cee0e45e9f7a2d
+
+.\.venv\Scripts\python.exe scripts\audit_phase_1b2a_official_samples.py
+entries=61; unique_events=56; MATCH=32; INDEPENDENT_EVIDENCE_UNAVAILABLE=29; systematic_defect=false; ledger_id=c37fbce55f6f6ceaf8dc89bbeca762b63869fa97c3a8bd5067fdedc8803344cd
+
+.\.venv\Scripts\python.exe scripts\review_phase_1b2a_evidence_sufficiency.py
+coverage_entries=29; semantic_resolutions=2; old_contract_satisfied=false; decision=PENDING; review_id=afb939daf6f13d1d91a2de0513b59fabeaa71cd3430b58c9f97602873971976c
+
+.\.venv\Scripts\python.exe scripts\build_phase_1b2a_knowledge_time.py
+observation_count=30; usable_at_D_cutoff=30; complete=false; pit_evidence_published=false; bundle_id=d4e050e28ff6b6b85b5fecc3a126d53068d15c90813bca98a12943f61591c152
+
+.\.venv\Scripts\python.exe scripts\evaluate_phase_1b2a_gates.py
+structural_status=PASS; pit_status=PENDING; cross_source_status=PENDING; survivorship_status=PASS; exception_budget_status=PASS; systematic_defect_status=PASS; decision=PENDING; publication_allowed=false
+
+.\.venv\Scripts\python.exe scripts\publish_phase_1b2a_status.py
+decision=PENDING; approval_id=05ab1c98a352f49e6e36e92a42503895ca536a8659a3aec62fe36d7543de3632; published_manifest_count=0; published_fact_count=0
+
+.\.venv\Scripts\python.exe -m pytest <focused evidence-sufficiency tests> -q
+16 passed in 0.05s
+
+.\.venv\Scripts\python.exe -m pytest -q
+295 passed in 9.06s
+
+.\.venv\Scripts\python.exe scripts\verify_standalone.py
+PASS forbidden imports: 0
+PASS forbidden active paths/dependencies: 0
+PASS prohibited repository inventory: 0
+PASS phase 1a architecture boundary violations: 0
+
+.\.venv\Scripts\python.exe scripts\clean_room_acceptance.py
+clean_room_dependencies=true; clean_room_install=true; clean_room_tests=true; build=true; wheel_install=true; wheel_smoke=true; zero_dependency_acceptance=true
+clean-room test_output: 295 passed in 106.39s (0:01:46)
+
+credential scan using actual local DATAHUB_API_KEY as sentinel
+CREDENTIAL_SCAN_FINDINGS=0
+
+git diff --check
+PASS (no output)
+```
