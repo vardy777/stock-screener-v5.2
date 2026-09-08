@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 from v5_2.data.identity import canonical_json  # noqa: E402
 from v5_2.data.real_audits.status_prospective_sampling import (  # noqa: E402
-    ProspectiveStatusCandidateV1, ProspectiveStatusEvidenceContractV1, freeze_prospective_inventory,
+    ProspectiveStatusCandidateV2, ProspectiveStatusEvidenceContractV2, freeze_prospective_inventory_v2,
     is_st_exit_transition,
 )
 
@@ -23,7 +23,7 @@ def artifacts(root, kind):
 
 
 def main() -> int:
-    contract = ProspectiveStatusEvidenceContractV1.adopted()
+    contract = ProspectiveStatusEvidenceContractV2.adopted()
     universe = set(json.loads((P1 / "governance" / f"daily-bar-universe-{UNIVERSE_ID}.json").read_text(encoding="utf-8"))["ordered_symbols"])
     master, master_hash = {}, {}
     for artifact in artifacts(P1, "security_master"):
@@ -33,7 +33,6 @@ def main() -> int:
     for artifact in artifacts(P1, "trade_calendar"):
         sessions.update(row["cal_date"] for row in artifact["provider_payload"]["rows"] if row["is_open"] == 1)
     ordered_sessions = sorted(sessions)
-    next_session = {day: ordered_sessions[index + 1] for index, day in enumerate(ordered_sessions[:-1])}
     missing = {(item["security_identity"], item["session"]) for item in json.loads(
         (P2 / "governance" / "missing-bar-classification-34612813c3bfdeb233bf41b66796a9ca9e89751062523ca7be30fc4c76f56420.json").read_text(encoding="utf-8"))["items"]}
     names, suspensions = [], []
@@ -42,12 +41,15 @@ def main() -> int:
             target.extend((row, artifact["payload_hash"]) for row in artifact["provider_payload"]["rows"])
     pools = {key: [] for key, _ in contract.sample_counts}
 
-    def add(semantic, identity, session, value, assertion, expected, evidence):
+    def add(semantic, identity, session, value, assertion, expected, evidence,
+            effective_from=None, effective_to=None):
         row = master.get(identity, {})
         exchange = "SSE" if identity.endswith(".SH") else "SZSE"
-        pools[semantic].append(ProspectiveStatusCandidateV1.create(
+        pools[semantic].append(ProspectiveStatusCandidateV2.create(
             security_identity=identity, session=session, exchange=exchange, board=str(row.get("market") or "UNKNOWN"),
             semantic=semantic, provider_value=value, semantic_assertion=assertion, expected_evidence=expected,
+            effective_from=effective_from or str(row.get("list_date") or session),
+            effective_to=effective_to or str(row.get("delist_date") or contract.coverage_end),
             effective_identity=True, confirmed_historically_tradable=identity in universe,
             provider_evidence_ids=tuple(evidence)))
 
@@ -84,7 +86,7 @@ def main() -> int:
             continue
         if row.get("start_date") in sessions:
             add("ST_ENTER", identity, row["start_date"], row["name"], "risk-warning state effective on session",
-                "independent daily isST=1", (evidence,))
+                "independent daily isST=1", (evidence,), row["start_date"], row.get("end_date") or contract.coverage_end)
     for identity, history in names_by_identity.items():
         if identity not in universe:
             continue
@@ -95,7 +97,8 @@ def main() -> int:
                 if exit_day in sessions:
                     add("ST_EXIT", identity, exit_day, str(current.get("name", "")),
                         "risk-warning name transitioned to a non-risk-warning name on session",
-                        "independent daily isST=0", (previous_evidence, current_evidence))
+                        "independent daily isST=0", (previous_evidence, current_evidence),
+                        exit_day, current.get("end_date") or contract.coverage_end)
     for row, evidence in suspensions:
         identity, session = row["ts_code"], row["trade_date"]
         if identity not in universe or session not in sessions:
@@ -106,18 +109,19 @@ def main() -> int:
         elif row["suspend_type"] == "R":
             add("RESUMPTION", identity, session, "R", "trading resumed on session",
                 "independent daily tradestatus=1", (evidence,))
-    pools["IDENTITY_TRANSITION"].append(ProspectiveStatusCandidateV1.create(
+    pools["IDENTITY_TRANSITION"].append(ProspectiveStatusCandidateV2.create(
         security_identity="300114.SZ", session="20250214", exchange="SZSE", board="创业板",
         semantic="IDENTITY_TRANSITION", provider_value="300114 through T-1; 302132 from 20250217",
         semantic_assertion="non-overlapping old/new effective identity chain",
-        expected_evidence="SZSE-hosted effective-code notice", effective_identity=True,
+        expected_evidence="SZSE-hosted effective-code notice", effective_from="20101013", effective_to="20250214",
+        effective_identity=True,
         confirmed_historically_tradable=True, provider_evidence_ids=("300114-to-302132-v1",)))
-    inventory = freeze_prospective_inventory(contract, {key: tuple(value) for key, value in pools.items()})
-    body = {"schema_version": "ProspectiveStatusSampleInventoryV1", **asdict(inventory)}
-    output = P2 / "governance" / f"prospective-status-sample-inventory-{inventory.inventory_id}.json"
+    inventory = freeze_prospective_inventory_v2(contract, {key: tuple(value) for key, value in pools.items()})
+    body = asdict(inventory)
+    output = P2 / "governance" / f"prospective-status-sample-inventory-v2-{inventory.inventory_id}.json"
     output.write_bytes(canonical_json(body))
-    contract_path = P2 / "governance" / f"prospective-status-evidence-contract-{contract.contract_id}.json"
-    contract_path.write_bytes(canonical_json({"schema_version": "ProspectiveStatusEvidenceContractV1", **asdict(contract)}))
+    contract_path = P2 / "governance" / f"prospective-status-evidence-contract-v2-{contract.contract_id}.json"
+    contract_path.write_bytes(canonical_json(asdict(contract)))
     print(json.dumps({"contract_id": contract.contract_id, "inventory_id": inventory.inventory_id,
                       "sample_count": len(inventory.samples), "counts": dict(inventory.counts)}, indent=2))
     return 0
