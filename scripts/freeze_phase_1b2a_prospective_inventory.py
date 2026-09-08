@@ -10,6 +10,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from v5_2.data.identity import canonical_json  # noqa: E402
 from v5_2.data.real_audits.status_prospective_sampling import (  # noqa: E402
     ProspectiveStatusCandidateV1, ProspectiveStatusEvidenceContractV1, freeze_prospective_inventory,
+    is_st_exit_transition,
 )
 
 P1, P2 = ROOT / "data" / "phase_1b1", ROOT / "data" / "phase_1b2a"
@@ -74,6 +75,9 @@ def main() -> int:
         if row.get("delist_date") in sessions:
             add("DELISTING_BOUNDARY", identity, row["delist_date"], row["delist_date"],
                 "provider master asserts delisting effective boundary", "official delisting anchor and no trading from effective date", (master_hash[identity],))
+    names_by_identity = {}
+    for row, evidence in names:
+        names_by_identity.setdefault(row["ts_code"], []).append((row, evidence))
     for row, evidence in names:
         identity = row["ts_code"]
         if identity not in universe or "ST" not in str(row.get("name", "")).upper():
@@ -81,11 +85,17 @@ def main() -> int:
         if row.get("start_date") in sessions:
             add("ST_ENTER", identity, row["start_date"], row["name"], "risk-warning state effective on session",
                 "independent daily isST=1", (evidence,))
-        end = row.get("end_date")
-        if end in next_session:
-            exit_day = next_session[end]
-            add("ST_EXIT", identity, exit_day, "CLEAR_AFTER_INTERVAL", "risk-warning interval ended before session",
-                "independent daily isST=0", (evidence,))
+    for identity, history in names_by_identity.items():
+        if identity not in universe:
+            continue
+        ordered = sorted(history, key=lambda item: item[0].get("start_date", ""))
+        for (previous, previous_evidence), (current, current_evidence) in zip(ordered, ordered[1:]):
+            if is_st_exit_transition(str(previous.get("name", "")), str(current.get("name", ""))):
+                exit_day = current.get("start_date")
+                if exit_day in sessions:
+                    add("ST_EXIT", identity, exit_day, str(current.get("name", "")),
+                        "risk-warning name transitioned to a non-risk-warning name on session",
+                        "independent daily isST=0", (previous_evidence, current_evidence))
     for row, evidence in suspensions:
         identity, session = row["ts_code"], row["trade_date"]
         if identity not in universe or session not in sessions:

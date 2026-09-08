@@ -9,6 +9,10 @@ SEMANTICS = ("ACTIVE_ORDINARY_STATUS", "ACTUAL_FIRST_TRADABLE_SESSION", "DELISTI
              "ST_ENTER", "ST_EXIT", "FULL_DAY_SUSPENSION", "RESUMPTION", "IDENTITY_TRANSITION")
 
 
+def is_st_exit_transition(previous_name: str, current_name: str) -> bool:
+    return "ST" in previous_name.upper() and "ST" not in current_name.upper()
+
+
 @dataclass(frozen=True, slots=True)
 class ProspectiveStatusEvidenceContractV1:
     coverage_start: str

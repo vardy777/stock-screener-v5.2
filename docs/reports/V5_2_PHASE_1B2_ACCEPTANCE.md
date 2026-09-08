@@ -560,3 +560,89 @@ CREDENTIAL_SCAN_FINDINGS=0
 git diff --check
 PASS (no output)
 ```
+
+## Phase 1B-2A Prospective Evidence Contract & PIT Closure — 2026-09-08
+
+Starting HEAD: `0209829732f87ee8414f4adf40f7a9d3a3e05874`.
+
+The old 61-entry contract remains immutable and unchanged: `MATCH=32`, `MISMATCH=0`, `UNRESOLVED=0`, `INDEPENDENT_EVIDENCE_UNAVAILABLE=29`. It was not reused as a passing result.
+
+Prospective Evidence Contract V1 was adopted and its sample inventory was committed before independent acquisition:
+
+```text
+contract_id = ec83de3e51d5b13e021ff57a7c1a96dedc33c8df74ba7b1f03fcb8450d09efab
+inventory_id = 721523af643819654985676d675aee2cc24c9d7031a0e13d4af64efe6a894f87
+sample_count = 71
+ACTIVE_ORDINARY_STATUS = 10
+ACTUAL_FIRST_TRADABLE_SESSION = 10
+DELISTING_BOUNDARY = 10
+ST_ENTER = 10
+ST_EXIT = 10
+FULL_DAY_SUSPENSION = 10
+RESUMPTION = 10
+IDENTITY_TRANSITION = 1
+pre-acquisition freeze commit = 7947ea2
+```
+
+The bounded independent run produced ledger `59cc248619400a9155ade3c79c036078d7c614f68f872e82762b36805d667682`: `MATCH=64`, `MISMATCH=4`, `INDEPENDENT_EVIDENCE_UNAVAILABLE=3`.
+
+The four mismatches are confirmed prospective inventory construction defects, not source-unavailability cases. `002147.SZ/20200429`, `300446.SZ/20210428`, `002220.SZ/20200602`, and `002420.SZ/20200723` were asserted as ST exits, but the provider's next effective name remained an `ST` or `*ST` name and BaoStock independently reported `isST=1`. The selector had incorrectly treated every risk-warning interval end as an exit. The selector now requires an explicit risk-warning-name to non-risk-warning-name transition, with regression coverage for `ST -> *ST` and `*ST -> ST`. The frozen V1 inventory and observed results were not replaced, resampled, or retroactively altered.
+
+The three unavailable delisting-boundary observations were not promoted to MATCH. Bounded official review found exact exchange-hosted support for `300630.SZ/20250522` and `600200.SH/20251231`, while `000851.SZ/20251111` did not obtain a sufficiently exact independent anchor within the time box. Because the four confirmed semantic defects already fail the contract, no open-ended retrieval or outcome-driven replacement sampling was performed.
+
+PIT coverage remains incomplete. `StatusAvailabilityPolicyV2` was not changed, no `StatusPITKnowledgeTimeEvidenceV1` PASS artifact was created, and the historical 16:30 Asia/Shanghai cutoff remains frozen. The future 20:00 acquisition / 22:00 reporting product requirement remains recorded only; no scheduler was started.
+
+The formal runtime path now consumes the prospective inventory and evidence ledger, an on-disk revocation registry, the immutable universe reconciliation, and actual exception artifacts:
+
+```text
+evidence builder -> gate evaluator -> source approval -> publisher boundary
+STRUCTURAL = PASS
+PIT = PENDING
+CROSS_SOURCE = FAIL
+SURVIVORSHIP = PASS
+EXCEPTION_BUDGET = PASS
+SYSTEMATIC_DEFECT = PASS
+SOURCE_APPROVAL = REJECTED
+PUBLICATION_ALLOWED = false
+APPROVED_FACTS = 0
+DATASET_MANIFEST = 0
+approval_id = 8b5d39956ff8d5b523ad5641d4fa481e4e45e639af30460dfefb2e9731283aa3
+equivalence_id = 4ada9d6e30779bd15f98c39140c3551372269fdf982a0caeae161e237c0997d8
+```
+
+This is a fail-closed terminal result for prospective contract V1. No 1B-2B or downstream research work was started.
+
+### Verification commands and exact results
+
+```text
+.\.venv\Scripts\python.exe scripts\acquire_phase_1b2a_prospective_evidence.py
+total=71; MATCH=64; MISMATCH=4; INDEPENDENT_EVIDENCE_UNAVAILABLE=3; ledger_id=59cc248619400a9155ade3c79c036078d7c614f68f872e82762b36805d667682
+
+.\.venv\Scripts\python.exe scripts\evaluate_phase_1b2a_gates.py
+structural_status=PASS; pit_status=PENDING; cross_source_status=FAIL; survivorship_status=PASS; exception_budget_status=PASS; systematic_defect_status=PASS; decision=REJECTED; publication_allowed=false
+
+.\.venv\Scripts\python.exe scripts\publish_phase_1b2a_status.py
+decision=REJECTED; approval_id=8b5d39956ff8d5b523ad5641d4fa481e4e45e639af30460dfefb2e9731283aa3; equivalence=NOT_EQUIVALENT; published_manifest_count=0; published_fact_count=0
+
+.\.venv\Scripts\python.exe -m pytest tests/real_audits/test_status_prospective_sampling.py tests/real_audits/test_status_gate_integration.py tests/real_audits/test_status_official_samples.py -q
+11 passed in 0.05s
+
+.\.venv\Scripts\python.exe -m pytest -q
+298 passed in 10.64s
+
+.\.venv\Scripts\python.exe scripts\verify_standalone.py
+PASS forbidden imports: 0
+PASS forbidden active paths/dependencies: 0
+PASS prohibited repository inventory: 0
+PASS phase 1a architecture boundary violations: 0
+
+.\.venv\Scripts\python.exe scripts\clean_room_acceptance.py
+clean_room_dependencies=true; clean_room_install=true; clean_room_tests=true; build=true; wheel_install=true; wheel_smoke=true; zero_dependency_acceptance=true
+clean-room test_output: 298 passed in 108.39s (0:01:48)
+
+credential scan using actual local DATAHUB_API_KEY and TUSHARE_TOKEN values as sentinels
+CREDENTIAL_SCAN_FINDINGS=0
+
+git diff --check
+PASS (line-ending notices only; no whitespace errors)
+```

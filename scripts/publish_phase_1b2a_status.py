@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import fields
+from dataclasses import fields, replace
 from datetime import date, datetime, timezone
 import json
 from pathlib import Path
@@ -70,6 +70,16 @@ def main() -> int:
     equivalence = build_status_equivalence(
         classification=classification, audit=audit, replay=replay, raw_hashes=raw_hashes
     )
+    gate = json.loads((GOVERNANCE / "status-gate-evaluation-v2.json").read_text(encoding="utf-8"))
+    if gate["cross_source_status"] == "FAIL":
+        prospective_path, prospective = _latest("prospective-status-evidence-ledger")
+        equivalence = replace(equivalence, decision=DatasetEquivalenceDecision.NOT_EQUIVALENT)
+        equivalence = replace(equivalence, evidence_id=content_hash({
+            **{field.name: getattr(equivalence, field.name) for field in fields(equivalence)
+               if field.name not in {"evidence_id", "content_hash"}},
+            "schema_version": "DatasetEquivalenceEvidenceV1",
+        }))
+        equivalence = replace(equivalence, content_hash=equivalence.evidence_id)
     evidence = []
     statuses = {
         EvidenceType.COVERAGE: EvidenceStatus.PASS,
@@ -83,6 +93,14 @@ def main() -> int:
             policy_version="phase-1b2a-status-evidence-v1", source_version_identity=source_version,
             input_artifact_ids=inputs, valid_until=None,
             findings=(f"status_audit={audit['result'].get(kind.value.split('_')[0] + '_status', status.value)}",),
+        ))
+    if gate["cross_source_status"] == "FAIL":
+        evidence.append(EvidenceArtifactV1.create(
+            evidence_type=EvidenceType.CROSS_SOURCE, status=EvidenceStatus.FAIL,
+            observed_at=NOW, verified_at=NOW, policy_version="phase-1b2a-prospective-cross-source-v1",
+            source_version_identity=source_version,
+            input_artifact_ids=(prospective["content_hash"],), valid_until=None,
+            findings=("prospective contract contains confirmed semantic mismatches",),
         ))
     validity = EvidenceValidityPolicy(
         policy_version="phase-1b2a-status-validity-v1",

@@ -3,7 +3,14 @@ import pytest
 
 from v5_2.data.real_audits.status_prospective_sampling import (
     ProspectiveStatusCandidateV1, ProspectiveStatusEvidenceContractV1, freeze_prospective_inventory,
+    is_st_exit_transition,
 )
+
+
+def test_st_exit_requires_transition_to_non_risk_warning_name() -> None:
+    assert is_st_exit_transition("*ST旧名", "新名称")
+    assert not is_st_exit_transition("ST旧名", "*ST新名")
+    assert not is_st_exit_transition("*ST旧名", "ST新名")
 
 
 def candidate(index, semantic="ACTIVE_ORDINARY_STATUS"):
