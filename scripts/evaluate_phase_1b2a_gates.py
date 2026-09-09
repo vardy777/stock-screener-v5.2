@@ -16,6 +16,7 @@ from v5_2.data.real_audits.status_official_samples import (  # noqa: E402
     OfficialStatusSampleEntryV1, OfficialStatusSampleLedgerV1,
 )
 from v5_2.data.real_audits.status_validation import evaluate_status_gates  # noqa: E402
+from v5_2.data.real_audits.status_knowledge_time import StatusPITKnowledgeTimeEvidenceV1  # noqa: E402
 from v5_2.data.real_audits.pinned_artifacts import load_pinned_json  # noqa: E402
 
 INVENTORY_ID = "cef91ec0a055f01ac2f0f82ec8e15ce75f4e000acd2123a70685fb25d1df3c9c"
@@ -23,6 +24,7 @@ LEDGER_ID = "7aee446328623da71f2f0ca8ad3655399b8f7d389e4a71ea9304b075d3838cb9"
 UNIVERSE_ID = "a5ab86ff4fc0fbc84e3d5f06dbcb1bf51a123dd2e900246404b795d5e1149613"
 EXCEPTION_ID = "5e54d212b5f67b5a7d450698c72a71cebae1aa143cb173cb81883528f51f381d"
 AUDIT_ID = "23fb236fd6d1fdf7e0691c3bf3bfb8db3cf5524f13bcddb510bd21fbc52e03b7"
+PIT_ID = "aabfbcd3e8d4d03ff400c52a12ff005638b259bf0185e802d96372b4015f3f8f"
 
 
 def latest(directory: Path, prefix: str):
@@ -67,7 +69,12 @@ def main() -> int:
         schema_version="Phase1B2AStatusAuditV1", identity_field="evidence_id", expected_identity=AUDIT_ID)
     exceptions = load_pinned_json(directory / f"status-exception-audit-{EXCEPTION_ID}.json",
         schema_version="StatusExceptionAuditV2", identity_field="content_hash", expected_identity=EXCEPTION_ID)
-    # No complete PIT evidence artifact exists yet; endpoint diagnostics are not promoted to PIT proof.
+    raw_pit = load_pinned_json(directory / f"status-pit-knowledge-time-{PIT_ID}.json",
+        schema_version="StatusPITKnowledgeTimeEvidenceV1", identity_field="content_hash",
+        expected_identity=PIT_ID)
+    pit = StatusPITKnowledgeTimeEvidenceV1(**{
+        key: value for key, value in raw_pit.items() if key != "schema_version"
+    })
     revocations = tuple(json.loads(path.read_text(encoding="utf-8"))["approval_id"]
                         for path in ROOT.joinpath("data").rglob("approval-revocation-*.json"))
     registry = {"schema_version": "SourceApprovalRevocationRegistryV1",
@@ -75,17 +82,19 @@ def main() -> int:
     registry["content_hash"] = content_hash(registry)
     (directory / f"source-approval-revocation-registry-{registry['content_hash']}.json").write_bytes(canonical_json(registry))
     source_version = content_hash(tuple(audit["raw_payload_hashes"]))
-    result = evaluate_status_gates(structural_status=audit["result"]["structural_status"], pit_evidence=None,
+    result = evaluate_status_gates(structural_status=audit["result"]["structural_status"], pit_evidence=pit,
         official_ledger=ledger, reconciliation=reconciliation,
         exception_budget_pass=exceptions["result"]["passed"], systematic_defect=exceptions["result"]["systematic_pattern"],
         source_version_identity=source_version, revoked_artifact_ids=revocations,
         expected_inventory_id=inventory["inventory_id"])
     output = directory / "status-gate-evaluation-v2.json"
-    output.write_bytes(canonical_json({"schema_version": "StatusGateEvaluationV2", **asdict(result),
-                                       "input_artifact_ids": (prospective["content_hash"], inventory["inventory_id"],
-                                                              ledger.content_hash, raw_universe["content_hash"],
-                                                              exceptions["content_hash"], audit["evidence_id"],
-                                                              registry["content_hash"])}))
+    body = {"schema_version": "StatusGateEvaluationV2", **asdict(result),
+            "input_artifact_ids": (prospective["content_hash"], inventory["inventory_id"],
+                                   ledger.content_hash, raw_universe["content_hash"],
+                                   exceptions["content_hash"], audit["evidence_id"],
+                                   registry["content_hash"], pit.content_hash)}
+    body["content_hash"] = content_hash(body)
+    output.write_bytes(canonical_json(body))
     print(json.dumps(asdict(result), indent=2))
     return 0 if result.decision in {"PENDING", "REJECTED"} and not result.publication_allowed else 1
 

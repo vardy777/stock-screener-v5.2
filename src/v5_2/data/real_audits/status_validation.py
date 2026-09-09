@@ -7,6 +7,7 @@ from v5_2.data.evidence import EvidenceArtifactV1, EvidenceStatus
 from v5_2.data.identity import content_hash
 from v5_2.data.real_audits.historical_universe import HistoricalUniverseReconciliationV1
 from v5_2.data.real_audits.status_official_samples import OfficialStatusSampleLedgerV1
+from v5_2.data.real_audits.status_knowledge_time import StatusPITKnowledgeTimeEvidenceV1
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,7 +67,8 @@ def _universe_integrity(item: HistoricalUniverseReconciliationV1) -> bool:
     return item.content_hash == content_hash(body)
 
 
-def evaluate_status_gates(*, structural_status: str, pit_evidence: EvidenceArtifactV1 | None,
+def evaluate_status_gates(*, structural_status: str,
+                          pit_evidence: EvidenceArtifactV1 | StatusPITKnowledgeTimeEvidenceV1 | None,
                           official_ledger: OfficialStatusSampleLedgerV1 | None,
                           reconciliation: HistoricalUniverseReconciliationV1 | None,
                           exception_budget_pass: bool, systematic_defect: bool,
@@ -77,8 +79,16 @@ def evaluate_status_gates(*, structural_status: str, pit_evidence: EvidenceArtif
     confirmed_error = structural_status != "PASS" or not exception_budget_pass or systematic_defect
     pit_status = "PENDING"
     if pit_evidence is not None:
-        if (not _evidence_integrity(pit_evidence) or pit_evidence.evidence_id in revoked
-                or pit_evidence.source_version_identity != source_version_identity):
+        if isinstance(pit_evidence, StatusPITKnowledgeTimeEvidenceV1):
+            valid = (pit_evidence.verify() and pit_evidence.content_hash not in revoked
+                     and pit_evidence.source_version_identity == source_version_identity)
+            if not valid:
+                pit_status, confirmed_error = "FAIL", True
+                reasons.append("pit artifact revoked, tampered, or out of scope")
+            elif pit_evidence.complete:
+                pit_status = "PASS"
+        elif (not _evidence_integrity(pit_evidence) or pit_evidence.evidence_id in revoked
+              or pit_evidence.source_version_identity != source_version_identity):
             pit_status, confirmed_error = "FAIL", True
             reasons.append("pit artifact revoked, tampered, or out of scope")
         else:

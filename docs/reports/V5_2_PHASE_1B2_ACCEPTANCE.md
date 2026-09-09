@@ -310,7 +310,7 @@ structural_status=PASS; pit_status=PENDING; cross_source_status=PENDING; survivo
 decision=PENDING; approval_id=05ab1c98a352f49e6e36e92a42503895ca536a8659a3aec62fe36d7543de3632; equivalence=INSUFFICIENT_EVIDENCE; published_manifest_count=0; published_fact_count=0
 
 .\.venv\Scripts\python.exe -m pytest <focused gate/evidence/provider tests> -q
-39 passed in 0.11s
+38 passed in 0.10s
 
 .\.venv\Scripts\python.exe -m pytest -q
 289 passed in 9.37s
@@ -645,6 +645,93 @@ CREDENTIAL_SCAN_FINDINGS=0
 
 git diff --check
 PASS (line-ending notices only; no whitespace errors)
+```
+
+## Phase 1B-2A PIT Final Closure — 2026-09-10
+
+Starting HEAD: `451f33d97a465b8ef20250f68980097fb2186107`.
+The frozen V2 contract, inventory and 71/71 cross-source ledger were not changed.
+
+### PIT coverage matrix
+
+| Semantic | Historical fact | Legal D knowledge | Safe fallback | Runtime rule | Evidence |
+|---|---|---|---|---|---|
+| ACTIVE_ORDINARY_STATUS | D traded under an effective identity and was neither risk-warning nor full-day suspended | D close | next approved session when only announcement-derived | actual D observation → D 16:30 | sufficient |
+| ACTUAL_FIRST_TRADABLE_SESSION | actual first trading occurred on D | after actual D close, never from a later retrospective document | next approved session if actual D trading is not observed | actual D trading → D 16:30 | sufficient |
+| DELISTING | effective delisting is distinct from decision and last trading day | D only when effective state is contemporaneously established | next approved session when publication cutoff is unproved | conservative next approved session 16:30 | sufficient |
+| ST_ENTER | actual D risk-warning state | D close | next approved session for announcement-only evidence | observed D state → D 16:30 | sufficient |
+| ST_EXIT | actual D non-risk-warning state after risk warning | D close; ST→*ST is not exit | next approved session for announcement-only evidence | observed D cleared state → D 16:30 | sufficient |
+| FULL_DAY_SUSPENSION | independently supported full-day D suspension | D close | next approved session if full-day status is ambiguous | supported full-day D state → D 16:30 | sufficient |
+| RESUMPTION | actual trading resumed on D | D close; D+1 trading cannot be known on D | next approved session absent contemporaneous notice | actual resumed D trading → D 16:30 | sufficient |
+| IDENTITY_TRANSITION | official effective identity chain changes on D | never from retrospective provider code | next approved session for date-only effective evidence | official chain only; conservative next session 16:30 | sufficient |
+
+The single immutable PIT artifact is:
+
+```text
+schema = StatusPITKnowledgeTimeEvidenceV1
+artifact_id = aabfbcd3e8d4d03ff400c52a12ff005638b259bf0185e802d96372b4015f3f8f
+policy = status-availability-after-close-v2
+historical cutoff = 16:30 Asia/Shanghai
+covered semantics = 8/8
+complete = true
+final cross-source ledger = 7aee446328623da71f2f0ca8ad3655399b8f7d389e4a71ea9304b075d3838cb9
+```
+
+The runtime gate now pins and verifies that artifact instead of passing
+`pit_evidence=None`. The persisted gate has content hash
+`6efbf1f1527321413a516b0b48e1cd8f6e2cf7938fdad5bfb6f95bc70742acc6`.
+
+The publisher no longer binds the original ledger or hard-codes 61 unresolved
+samples. It consumes the content-verified all-PASS gate, complete PIT artifact,
+and final 71/71 ledger. A missing, tampered or inconsistent pin stops publication.
+
+```text
+STRUCTURAL = PASS
+PIT = PASS
+CROSS_SOURCE = PASS
+SURVIVORSHIP = PASS
+EXCEPTION_BUDGET = PASS
+SYSTEMATIC_DEFECT = PASS
+SOURCE_APPROVAL = APPROVED_WITH_RULES
+PUBLICATION_ALLOWED = true
+APPROVED_FACTS = 71
+DATASET_MANIFEST = 57b4d38523c32a31959fb8dc9e2335778f97ed86562413c95e7ff9716ec65e3d
+APPROVAL_ID = 60d31609f590cf08f54ff682d5c4de5a987cdb670b13fe33eeb2466389d39edc
+```
+
+The manifest pins the approval, final cross-source ledger, PIT availability
+policy, raw source version, normalized candidate hashes and all 71 fact hashes.
+Published facts cover the frozen V2 acceptance inventory only; no claim is made
+that these 71 acceptance facts constitute a full materialization of every daily
+status row in the 2010–2025 source audit.
+
+### Verification commands and exact results
+
+```text
+.\.venv\Scripts\python.exe scripts\build_phase_1b2a_knowledge_time.py
+artifact_id=aabfbcd3e8d4d03ff400c52a12ff005638b259bf0185e802d96372b4015f3f8f; complete=true; covered_semantics=8
+
+.\.venv\Scripts\python.exe scripts\evaluate_phase_1b2a_gates.py
+STRUCTURAL=PASS; PIT=PASS; CROSS_SOURCE=PASS; SURVIVORSHIP=PASS; EXCEPTION_BUDGET=PASS; SYSTEMATIC_DEFECT=PASS; decision=APPROVED_WITH_RULES; publication_allowed=true
+
+.\.venv\Scripts\python.exe scripts\publish_phase_1b2a_status.py
+decision=APPROVED_WITH_RULES; equivalence=EQUIVALENT_WITH_RULES; published_fact_count=71; published_manifest_count=1
+
+.\.venv\Scripts\python.exe -m pytest tests/real_audits/test_status_knowledge_time.py tests/real_audits/test_status_gate_integration.py tests/real_audits/test_status_approval.py tests/real_audits/test_status_availability.py tests/real_audits/test_status_normalization.py tests/data/test_security_status_facts.py tests/data/test_security_status_repository.py -q
+39 passed in 0.11s
+
+.\.venv\Scripts\python.exe -m pytest -q
+323 passed in 10.33s
+
+.\.venv\Scripts\python.exe scripts\verify_standalone.py
+PASS forbidden imports: 0; PASS forbidden active paths/dependencies: 0; PASS prohibited repository inventory: 0; PASS phase 1a architecture boundary violations: 0
+
+.\.venv\Scripts\python.exe -m build
+Successfully built stock_screener_v5_2-5.2.0.tar.gz and stock_screener_v5_2-5.2.0-py3-none-any.whl
+
+.\.venv\Scripts\python.exe scripts\clean_room_acceptance.py
+clean_room_dependencies=true; clean_room_install=true; clean_room_tests=true; build=true; wheel_install=true; wheel_smoke=true; old_pythonpath_removed=true; zero_dependency_acceptance=true
+clean-room test_output: 323 passed in 108.63s (0:01:48)
 ```
 
 ## Phase 1B-2A Prospective Evidence Contract V2 — 2026-09-09

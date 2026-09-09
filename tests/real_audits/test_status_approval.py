@@ -7,14 +7,19 @@ from v5_2.data.source_approval import ApprovalDecision, SourceApprovalArtifactV1
 from scripts.publish_phase_1b2a_status import build_status_equivalence
 
 
-def test_equivalence_unexplained_count_comes_from_classification() -> None:
+def test_equivalence_consumes_passed_gate_and_final_71_match_ledger() -> None:
     equivalence = build_status_equivalence(
-        classification={"counts": [["SUSPENDED", 40], ["UNEXPLAINED", 7]], "content_hash": "c"},
+        classification={"counts": [["UNEXPLAINED", 0]], "content_hash": "c"},
         audit={"sample_inventory_id": "sample", "pit_findings": ["pit"],
                "cross_source_findings": ["cross"], "evidence_id": "audit"},
         replay={"evidence_id": "replay"}, raw_hashes=("raw",),
+        gate={"pit_status": "PASS", "cross_source_status": "PASS", "publication_allowed": True},
+        prospective={"content_hash": "ledger", "observations": tuple(
+            {"resolution": "MATCH"} for _ in range(71))},
     )
-    assert "7 missing bars unexplained" in equivalence.limitations
+    assert equivalence.decision.value == "EQUIVALENT_WITH_RULES"
+    assert equivalence.value_comparison_summary == {"matched": 71, "mismatched": 0, "unresolved": 0}
+    assert not any("survivorship audit failed" in item for item in equivalence.limitations)
 
 
 def test_rejected_status_approval_cannot_publish_manifest() -> None:

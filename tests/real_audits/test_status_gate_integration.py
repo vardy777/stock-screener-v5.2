@@ -5,6 +5,9 @@ from v5_2.data.evidence import EvidenceArtifactV1, EvidenceStatus, EvidenceType
 from v5_2.data.real_audits.historical_universe import reconcile_historical_universe
 from v5_2.data.real_audits.status_official_samples import build_official_sample_ledger
 from v5_2.data.real_audits.status_validation import evaluate_status_gates
+from v5_2.data.real_audits.status_knowledge_time import (
+    REQUIRED_STATUS_SEMANTICS, StatusPITKnowledgeTimeEvidenceV1,
+)
 
 NOW = datetime(2026, 9, 8, tzinfo=timezone.utc)
 SOURCE = "source-version"
@@ -36,6 +39,16 @@ def evaluate(**changes):
         source_version_identity=SOURCE, revoked_artifact_ids=(), expected_inventory_id="inventory")
     values.update(changes)
     return evaluate_status_gates(**values)
+
+
+def complete_pit_artifact():
+    return StatusPITKnowledgeTimeEvidenceV1.create(
+        policy_version="status-availability-after-close-v2", historical_cutoff="16:30:00+08:00",
+        semantic_rules=tuple((item, "MARKET_OBSERVABLE_BY_CLOSE", "D@16:30+08:00")
+                             for item in REQUIRED_STATUS_SEMANTICS),
+        supporting_evidence_ids=("ledger", "calendar", "master", "daily"),
+        safe_session_rules=("date-only=>next-approved-session@16:30",), contract_id="contract",
+        inventory_id="inventory", final_cross_source_evidence_id="ledger", source_version_identity=SOURCE)
 
 
 def test_all_valid_artifacts_are_required_for_approval_and_publication() -> None:
@@ -74,3 +87,12 @@ def test_revoked_tampered_and_wrong_scope_artifacts_fail_closed() -> None:
     assert evaluate(revoked_artifact_ids=(valid.content_hash,)).decision == "REJECTED"
     assert evaluate(official_ledger=replace(valid, content_hash="tampered")).decision == "REJECTED"
     assert evaluate(pit_evidence=pit(source="other-version")).decision == "REJECTED"
+
+
+def test_gate_accepts_complete_pinned_pit_artifact_and_rejects_missing_semantic() -> None:
+    assert evaluate(pit_evidence=complete_pit_artifact()).pit_status == "PASS"
+    artifact = complete_pit_artifact()
+    incomplete = replace(artifact, semantic_rules=artifact.semantic_rules[:-1])
+    result = evaluate(pit_evidence=incomplete)
+    assert result.pit_status == "FAIL"
+    assert result.decision == "REJECTED"
