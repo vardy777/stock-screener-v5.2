@@ -80,20 +80,38 @@ def verify_official_anchor_text(*, document_sha256: str, extracted_text: str,
                                 security_identity: str, asserted_session: str,
                                 semantic: str, extractor_identity: str):
     code = security_identity.split(".", 1)[0]
+    compact_text = re.sub(r"\s+", "", extracted_text)
     dates = {
         f"{int(year):04d}{int(month):02d}{int(day):02d}"
         for year, month, day in re.findall(
             r"(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日", extracted_text
         )
     }
+    year, month, day = asserted_session[:4], str(int(asserted_session[4:6])), str(int(asserted_session[6:8]))
+    stated_date = f"{year}年{month}月{day}日"
+    if semantic == "ACTUAL_FIRST_TRADABLE_SESSION":
+        semantic_match = re.search(
+            re.escape(stated_date) + r"(.{0,50})(?:挂牌上市|上市交易)", compact_text
+        )
+        semantic_is_explicit = (semantic_match is not None and
+                                re.search(r"\d{4}年\d{1,2}月\d{1,2}日", semantic_match.group(1)) is None)
+    elif semantic == "DELISTING_BOUNDARY":
+        semantic_is_explicit = re.search(
+            re.escape(stated_date) + r".{0,50}(?:摘牌|终止上市)", compact_text
+        ) is not None
+    else:
+        semantic_is_explicit = False
+
     if code not in extracted_text:
         supported, reason = False, "document text does not state the security identity"
     elif asserted_session not in dates:
         supported, reason = False, "document text does not state the asserted effective session"
     elif semantic not in ANCHOR_TYPES:
         supported, reason = False, "unsupported official-anchor semantic"
+    elif not semantic_is_explicit:
+        supported, reason = False, "document text does not tie the asserted session to the listing semantic"
     else:
-        supported, reason = True, "identity and asserted effective session are explicit in document text"
+        supported, reason = True, "identity and asserted effective session are explicit in the anchor semantic"
     text_hash = content_hash(extracted_text)
     body = {"schema_version": "OfficialAnchorTextVerificationV1",
             "document_sha256": document_sha256, "security_identity": security_identity,

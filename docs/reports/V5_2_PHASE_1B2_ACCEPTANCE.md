@@ -966,3 +966,105 @@ Successfully built stock_screener_v5_2-5.2.0.tar.gz and stock_screener_v5_2-5.2.
 clean_room_dependencies=true; clean_room_install=true; clean_room_tests=true; build=true; wheel_install=true; wheel_smoke=true; old_pythonpath_removed=true; zero_dependency_acceptance=true
 clean-room test_output: 314 passed in 107.01s (0:01:47)
 ```
+
+## Phase 1B-2A CNINFO anchor closure and PIT review — 2026-09-10
+
+Starting HEAD: `6c60b6c0ca5aefb50fc51b8815d3c026dcff03ee`.
+
+The V2 contract and inventory remained frozen. No V3, new policy, inventory,
+threshold, governance framework, or resampling was created. The sole unresolved
+candidate remained `688053.SH / 20220708 / ACTUAL_FIRST_TRADABLE_SESSION`, with
+candidate hash `0013af1ac69f2f2bd9f54a55f6c3fe348aeafb3490bb8d5064c37337bc855a02`.
+
+The CNINFO-hosted issuer disclosure was downloaded and verified from its actual
+content, not inferred from its URL:
+
+```text
+URL = https://static.cninfo.com.cn/finalpage/2025-07-01/1224039754.PDF
+bytes = 143846
+document SHA-256 = c5bac86324145bdbfb5f7d6e47671ea5f8b12a26d54125ee1bf472f02acad92c
+document title = 成都思科瑞微电子股份有限公司首次公开发行部分限售股上市流通公告
+security code in body = 688053
+historical listing statement in body = 2022年7月8日在上海证券交易所科创板挂牌上市
+```
+
+The semantic verifier was tightened by TDD so a target date appearing elsewhere
+in a document cannot be matched to a different listing date. The resulting immutable
+artifacts are:
+
+```text
+recovery artifact_id = dd522570ba04a7d0c6e07d03395f47c87fe79f37040b52b9f95d57fb3443bdcf
+receipt_id = 1da94c4dac48ade169591d966401a97de5cb89ecdecac6fe0a86e89cce05af14
+text_verification_id = bff6d44e51d9fe01a0c25bd05313c605b1cbc80b5192fc2bbf48858172049a41
+supplement_id = 5e731ab5e7f971845627368bf43f6c1ff14b4234f74ba6abb17d1f05ac96cc0a
+resolution = MATCH
+```
+
+The earlier fail-closed SSE recovery artifact
+`72880e4a21ec34b6bc3ba208b67ed7a0cd234f39fce1ab6c8c6fea4dc96a5707`
+remains unchanged. Only the final factual anchor was superseded in a new immutable
+supplement. The new V2 ledger is
+`7aee446328623da71f2f0ca8ad3655399b8f7d389e4a71ea9304b075d3838cb9`:
+
+```text
+TOTAL = 71
+MATCH = 71
+MISMATCH = 0
+INDEPENDENT_EVIDENCE_UNAVAILABLE = 0
+CROSS_SOURCE = PASS
+```
+
+PIT was then reviewed through the actual gate path. The 2025 CNINFO disclosure is
+historical factual evidence only and was not used as contemporaneous 2022 knowledge-time
+evidence. The only existing knowledge-time bundle covers 30 observations in three
+semantic groups and declares `complete=false` and `pit_evidence_published=false`.
+There is therefore no complete, source-version-bound `EvidenceArtifactV1` proving all
+eight required status semantics. The gate correctly remains fail closed:
+
+```text
+STRUCTURAL = PASS
+PIT = PENDING
+CROSS_SOURCE = PASS
+SURVIVORSHIP = PASS
+EXCEPTION_BUDGET = PASS
+SYSTEMATIC_DEFECT = PASS
+SOURCE_APPROVAL = PENDING
+PUBLICATION_ALLOWED = false
+APPROVED_FACTS = 0
+DATASET_MANIFEST = 0
+```
+
+### Verification commands and exact results
+
+```text
+.\.venv\Scripts\python.exe scripts\verify_phase_1b2a_688053_anchor.py
+artifact_id=dd522570ba04a7d0c6e07d03395f47c87fe79f37040b52b9f95d57fb3443bdcf; document_sha256=c5bac86324145bdbfb5f7d6e47671ea5f8b12a26d54125ee1bf472f02acad92c; resolution=MATCH; supplement_id=5e731ab5e7f971845627368bf43f6c1ff14b4234f74ba6abb17d1f05ac96cc0a
+
+.\.venv\Scripts\python.exe scripts\reevaluate_phase_1b2a_official_anchors.py
+total=71; MATCH=71; MISMATCH=0; INDEPENDENT_EVIDENCE_UNAVAILABLE=0; CROSS_SOURCE=PASS; ledger_id=7aee446328623da71f2f0ca8ad3655399b8f7d389e4a71ea9304b075d3838cb9
+
+.\.venv\Scripts\python.exe scripts\evaluate_phase_1b2a_gates.py
+STRUCTURAL=PASS; PIT=PENDING; CROSS_SOURCE=PASS; SURVIVORSHIP=PASS; EXCEPTION_BUDGET=PASS; SYSTEMATIC_DEFECT=PASS; decision=PENDING; publication_allowed=false
+
+.\.venv\Scripts\python.exe -m pytest tests/real_audits/test_official_anchor_gaps.py tests/real_audits/test_status_cross_source.py tests/real_audits/test_status_gate_integration.py tests/real_audits/test_status_approval.py tests/real_audits/test_status_knowledge_time.py -q
+19 passed in 0.09s
+
+.\.venv\Scripts\python.exe -m pytest -q
+315 passed in 113.99s (0:01:53)
+
+.\.venv\Scripts\python.exe scripts\verify_standalone.py
+PASS forbidden imports: 0; PASS forbidden active paths/dependencies: 0; PASS prohibited repository inventory: 0; PASS phase 1a architecture boundary violations: 0
+
+.\.venv\Scripts\python.exe -m build
+Successfully built stock_screener_v5_2-5.2.0.tar.gz and stock_screener_v5_2-5.2.0-py3-none-any.whl
+
+.\.venv\Scripts\python.exe scripts\clean_room_acceptance.py
+clean_room_dependencies=true; clean_room_install=true; clean_room_tests=true; build=true; wheel_install=true; wheel_smoke=true; old_pythonpath_removed=true; zero_dependency_acceptance=true
+clean-room test_output: 315 passed in 112.44s (0:01:52)
+
+credential scan using local DATAHUB_API_KEY and TUSHARE_TOKEN values as sentinels
+CREDENTIAL_SCAN_FINDINGS=0; .env ignored
+
+git diff --check
+PASS (line-ending notices only; no whitespace errors)
+```

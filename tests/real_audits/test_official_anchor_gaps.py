@@ -102,3 +102,20 @@ def test_semantic_verification_requires_identity_and_effective_session_in_docume
     )
     assert unsupported.supported is False
     assert unsupported.reason == "document text does not state the asserted effective session"
+
+
+def test_listing_date_must_be_tied_to_the_listing_semantic() -> None:
+    unrelated_date = (
+        "证券代码：688053。公司于2022年7月8日发布其他公告；"
+        "公司股票于2025年7月8日在上海证券交易所科创板挂牌上市。"
+    )
+    result = verify_official_anchor_text(
+        document_sha256="c" * 64,
+        extracted_text=unrelated_date,
+        security_identity="688053.SH",
+        asserted_session="20220708",
+        semantic="ACTUAL_FIRST_TRADABLE_SESSION",
+        extractor_identity="pdf-text-extractor-v1",
+    )
+    assert result.supported is False
+    assert result.reason == "document text does not tie the asserted session to the listing semantic"

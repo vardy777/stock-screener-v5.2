@@ -17,18 +17,16 @@ from v5_2.data.real_audits.pinned_artifacts import load_pinned_json  # noqa: E40
 CONTRACT_ID = "3a9efd2f1047d9ad0432a72202bf1b8e7f926d153c339106475c37a694b20917"
 INVENTORY_ID = "cef91ec0a055f01ac2f0f82ec8e15ce75f4e000acd2123a70685fb25d1df3c9c"
 LEDGER_ID = "0f6772947b821a5819614c652d08544ac8bc14b789b796eb0f4338f71c79e473"
-
-
-def latest(directory: Path, prefix: str):
-    return max(directory.glob(f"{prefix}-*.json"), key=lambda path: path.stat().st_mtime)
+SUPPLEMENT_ID = "5e731ab5e7f971845627368bf43f6c1ff14b4234f74ba6abb17d1f05ac96cc0a"
 
 
 def main() -> int:
     governance = ROOT / "data" / "phase_1b2a" / "governance"
     original = load_pinned_json(governance / f"prospective-status-evidence-ledger-v2-{LEDGER_ID}.json",
         schema_version="ProspectiveStatusEvidenceLedgerV2", identity_field="content_hash", expected_identity=LEDGER_ID)
-    supplement_path = latest(governance, "official-anchor-supplement")
-    supplement = json.loads(supplement_path.read_text(encoding="utf-8"))
+    supplement = load_pinned_json(governance / f"official-anchor-supplement-{SUPPLEMENT_ID}.json",
+        schema_version="OfficialAnchorSupplementV1", identity_field="content_hash",
+        expected_identity=SUPPLEMENT_ID)
     evidence = tuple(OfficialAnchorEvidenceV1(**item) for item in supplement["evidence"])
     observations = merge_official_anchor_supplement(original["observations"], evidence)
     body = {"schema_version": "ProspectiveStatusEvidenceLedgerV2", "contract_id": CONTRACT_ID,
