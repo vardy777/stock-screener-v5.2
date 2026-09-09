@@ -876,3 +876,93 @@ CREDENTIAL_SCAN_FINDINGS=0; ENV_TRACKED=NO; .env ignored by .gitignore:9
 git diff --check
 PASS (line-ending notice only; no whitespace errors)
 ```
+
+## Phase 1B-2A 688053 SSE document semantic verification — 2026-09-09
+
+Starting HEAD: `bd278e01af2bb7093b6c63048661fd4014287fb7`.
+
+V1 remains permanently failed. V2 contract
+`3a9efd2f1047d9ad0432a72202bf1b8e7f926d153c339106475c37a694b20917`
+and inventory
+`cef91ec0a055f01ac2f0f82ec8e15ce75f4e000acd2123a70685fb25d1df3c9c`
+remain unchanged.
+
+The user-specified SSE-hosted PDF was downloaded and content-addressed:
+
+```text
+URL = https://star.sse.com.cn/disclosure/listedinfo/announcement/c/new/2023-04-10/688053_20230410_KLOY.pdf
+bytes = 566996
+document SHA-256 = 2b5cd22ab948ab5c284f9cf378b1f3312f0c34d795cae61976f8d68f70314a66
+document title = 关于使用部分超募资金永久性补充流动资金的公告
+publication date = 20230410
+```
+
+The document is an SSE-hosted issuer disclosure, but its text does not state that
+688053.SH listed or first traded on 2022-07-08. It states that the capital verification
+report was issued on 2022-07-05 and refers readers to a separate listing announcement
+published on 2022-07-07. A reference to another document is not semantic proof of the
+effective listing session asserted by the frozen sample.
+
+The immutable fail-closed evidence is:
+
+```text
+recovery artifact_id = 72880e4a21ec34b6bc3ba208b67ed7a0cd234f39fce1ab6c8c6fea4dc96a5707
+receipt_id = 46e04bb1ff9a933fdd25e5c6044f048ff7c1362017fbebda6ff837633b88dc91
+text_verification_id = 897180ed2e4e83c7313e51ffe88ba7ec3c41357f0062295aba49cf703eb14f02
+resolution = OFFICIAL_ANCHOR_UNAVAILABLE
+reason = document text does not state the asserted effective session
+```
+
+A regression test now requires both the security identity and asserted effective
+session to be present in verified document text. A URL, downloaded bytes, later
+reference, or caller-supplied assertion alone cannot satisfy this semantic check.
+
+Because the specified document failed content validation, the explicit P2 stop branch
+was taken. No final ledger replacement or PIT work was performed:
+
+```text
+V1 = FAIL permanently
+V2 TOTAL = 71
+V2 MATCH = 70
+V2 MISMATCH = 0
+V2 UNAVAILABLE = 1
+CROSS_SOURCE = PENDING
+PIT = PENDING
+SURVIVORSHIP = PASS
+EXCEPTION_BUDGET = PASS
+SYSTEMATIC_DEFECT = PASS
+SOURCE_APPROVAL = PENDING
+PUBLICATION_ALLOWED = false
+APPROVED_FACTS = 0
+DATASET_MANIFEST = 0
+```
+
+The 2023 follow-up announcement was not used as contemporaneous 2022-07-08 PIT
+knowledge-time evidence. No V3, threshold change, resampling, 1B-2B, or downstream
+research work was started.
+
+### Verification commands and exact results
+
+```text
+.\.venv\Scripts\python.exe scripts\verify_phase_1b2a_688053_anchor.py
+artifact_id=72880e4a21ec34b6bc3ba208b67ed7a0cd234f39fce1ab6c8c6fea4dc96a5707; document_sha256=2b5cd22ab948ab5c284f9cf378b1f3312f0c34d795cae61976f8d68f70314a66; text_verification_id=897180ed2e4e83c7313e51ffe88ba7ec3c41357f0062295aba49cf703eb14f02; resolution=OFFICIAL_ANCHOR_UNAVAILABLE
+
+.\.venv\Scripts\python.exe -m pytest tests/real_audits/test_official_anchor_gaps.py tests/real_audits/test_status_cross_source.py tests/real_audits/test_status_gate_integration.py tests/real_audits/test_status_approval.py -q
+15 passed in 0.06s
+
+.\.venv\Scripts\python.exe -m pytest -q
+314 passed in 9.62s
+
+.\.venv\Scripts\python.exe scripts\verify_standalone.py
+PASS forbidden imports: 0
+PASS forbidden active paths/dependencies: 0
+PASS prohibited repository inventory: 0
+PASS phase 1a architecture boundary violations: 0
+
+.\.venv\Scripts\python.exe -m build
+Successfully built stock_screener_v5_2-5.2.0.tar.gz and stock_screener_v5_2-5.2.0-py3-none-any.whl
+
+.\.venv\Scripts\python.exe scripts\clean_room_acceptance.py
+clean_room_dependencies=true; clean_room_install=true; clean_room_tests=true; build=true; wheel_install=true; wheel_smoke=true; old_pythonpath_removed=true; zero_dependency_acceptance=true
+clean-room test_output: 314 passed in 107.01s (0:01:47)
+```

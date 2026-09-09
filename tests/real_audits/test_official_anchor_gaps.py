@@ -5,6 +5,7 @@ from v5_2.data.real_audits.official_anchor_gaps import (
     build_official_anchor_gap_inventory,
     evaluate_official_anchor,
     merge_official_anchor_supplement,
+    verify_official_anchor_text,
 )
 
 
@@ -72,3 +73,32 @@ def test_supplement_merge_preserves_frozen_candidates_and_fails_closed() -> None
 
     with pytest.raises(ValueError, match="exactly"):
         merge_official_anchor_supplement(original, ())
+
+
+def test_semantic_verification_requires_identity_and_effective_session_in_document_text() -> None:
+    supporting = "证券代码：688053 公司股票于2022年7月8日在上海证券交易所科创板挂牌上市"
+    result = verify_official_anchor_text(
+        document_sha256="a" * 64,
+        extracted_text=supporting,
+        security_identity="688053.SH",
+        asserted_session="20220708",
+        semantic="ACTUAL_FIRST_TRADABLE_SESSION",
+        extractor_identity="pdf-text-extractor-v1",
+    )
+    assert result.supported is True
+    assert result.verification_id
+
+    reference_only = (
+        "证券代码：688053。具体情况详见2022年7月7日披露于上海证券交易所网站的"
+        "《成都思科瑞微电子股份有限公司首次公开发行股票科创板上市公告书》。"
+    )
+    unsupported = verify_official_anchor_text(
+        document_sha256="b" * 64,
+        extracted_text=reference_only,
+        security_identity="688053.SH",
+        asserted_session="20220708",
+        semantic="ACTUAL_FIRST_TRADABLE_SESSION",
+        extractor_identity="pdf-text-extractor-v1",
+    )
+    assert unsupported.supported is False
+    assert unsupported.reason == "document text does not state the asserted effective session"

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from hashlib import sha256
+import re
 
 from v5_2.data.identity import content_hash
 
@@ -56,10 +57,53 @@ class OfficialAnchorEvidenceV1:
     evidence_id: str
 
 
+@dataclass(frozen=True, slots=True)
+class OfficialAnchorTextVerificationV1:
+    document_sha256: str
+    security_identity: str
+    asserted_session: str
+    semantic: str
+    extractor_identity: str
+    extracted_text_hash: str
+    supported: bool
+    reason: str
+    verification_id: str
+
+
 ANCHOR_TYPES = {
     "ACTUAL_FIRST_TRADABLE_SESSION": "ACTUAL_LISTING_TRADING_DATE",
     "DELISTING_BOUNDARY": "DELISTING_EFFECTIVE_DATE",
 }
+
+
+def verify_official_anchor_text(*, document_sha256: str, extracted_text: str,
+                                security_identity: str, asserted_session: str,
+                                semantic: str, extractor_identity: str):
+    code = security_identity.split(".", 1)[0]
+    dates = {
+        f"{int(year):04d}{int(month):02d}{int(day):02d}"
+        for year, month, day in re.findall(
+            r"(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日", extracted_text
+        )
+    }
+    if code not in extracted_text:
+        supported, reason = False, "document text does not state the security identity"
+    elif asserted_session not in dates:
+        supported, reason = False, "document text does not state the asserted effective session"
+    elif semantic not in ANCHOR_TYPES:
+        supported, reason = False, "unsupported official-anchor semantic"
+    else:
+        supported, reason = True, "identity and asserted effective session are explicit in document text"
+    text_hash = content_hash(extracted_text)
+    body = {"schema_version": "OfficialAnchorTextVerificationV1",
+            "document_sha256": document_sha256, "security_identity": security_identity,
+            "asserted_session": asserted_session, "semantic": semantic,
+            "extractor_identity": extractor_identity, "extracted_text_hash": text_hash,
+            "supported": supported, "reason": reason}
+    return OfficialAnchorTextVerificationV1(
+        **{key: value for key, value in body.items() if key != "schema_version"},
+        verification_id=content_hash(body),
+    )
 
 
 def build_official_anchor_gap_inventory(contract_id, inventory_id, samples, observations,
