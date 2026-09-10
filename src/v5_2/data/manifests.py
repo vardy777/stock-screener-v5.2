@@ -51,6 +51,13 @@ class DatasetManifestV1:
     exception_set_hash: str | None
     cross_source_evidence_id: str | None
     availability_evidence_id: str | None
+    supported_action_types: tuple[str, ...]
+    unsupported_action_types: tuple[str, ...]
+    validated_coverage_by_action_type: tuple[tuple[str, date, date], ...]
+    materialized_coverage_by_action_type: tuple[tuple[str, date, date], ...]
+    coverage_gaps: tuple[tuple[date, date, str], ...]
+    unsupported_intervals: tuple[tuple[str, date, date], ...]
+    latest_approved_session: date | None
     manifest_hash: str
 
     @classmethod
@@ -92,6 +99,13 @@ class DatasetManifestV1:
         exception_set_hash: str | None = None,
         cross_source_evidence_id: str | None = None,
         availability_evidence_id: str | None = None,
+        supported_action_types: tuple[str, ...] = (),
+        unsupported_action_types: tuple[str, ...] = (),
+        validated_coverage_by_action_type: tuple[tuple[str, date, date], ...] = (),
+        materialized_coverage_by_action_type: tuple[tuple[str, date, date], ...] = (),
+        coverage_gaps: tuple[tuple[date, date, str], ...] = (),
+        unsupported_intervals: tuple[tuple[str, date, date], ...] = (),
+        latest_approved_session: date | None = None,
     ) -> DatasetManifestV1:
         approving = {ApprovalDecision.APPROVED, ApprovalDecision.APPROVED_WITH_RULES}
         if approval.decision not in approving:
@@ -141,6 +155,13 @@ class DatasetManifestV1:
             or not availability_evidence_id
         ):
             raise ManifestError("daily bar manifest requires frozen governance and audit lineage")
+        if source_name == "datahubco_tushare_proxy" and dataset_kind == "corporate_action" and (
+            not supported_action_types or not unsupported_action_types
+            or not validated_coverage_by_action_type or not materialized_coverage_by_action_type
+            or not unsupported_intervals or latest_approved_session is None
+            or not availability_evidence_id
+        ):
+            raise ManifestError("corporate action manifest requires scoped coverage lineage")
         for name, value in (
             ("created_at", created_at),
             ("approval_resolution_as_of", approval_resolution_as_of),
@@ -186,6 +207,13 @@ class DatasetManifestV1:
             "exception_set_hash": exception_set_hash,
             "cross_source_evidence_id": cross_source_evidence_id,
             "availability_evidence_id": availability_evidence_id,
+            "supported_action_types": tuple(sorted(set(supported_action_types))),
+            "unsupported_action_types": tuple(sorted(set(unsupported_action_types))),
+            "validated_coverage_by_action_type": tuple(sorted(validated_coverage_by_action_type)),
+            "materialized_coverage_by_action_type": tuple(sorted(materialized_coverage_by_action_type)),
+            "coverage_gaps": tuple(sorted(coverage_gaps)),
+            "unsupported_intervals": tuple(sorted(unsupported_intervals)),
+            "latest_approved_session": latest_approved_session,
         }
         digest = content_hash(body)
         values = dict(body)

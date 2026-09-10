@@ -241,3 +241,34 @@ def test_datahub_daily_bar_manifest_pins_frozen_governance_lineage() -> None:
     assert result.upstream_approval_ids == ("calendar-approval", "master-approval")
     assert result.request_inventory_id == "inventory-id"
     assert result.availability_evidence_id == "availability-evidence-id"
+
+
+def test_corporate_action_manifest_requires_scoped_coverage_lineage() -> None:
+    selected = replace(
+        approval(), source_name="datahubco_tushare_proxy", dataset_kind="corporate_action",
+        equivalence_evidence_id="equivalence-id", coverage_start=date(2010, 1, 4),
+        coverage_end=date(2026, 9, 9),
+    )
+    common = dict(
+        created_at=NOW, source_name="datahubco_tushare_proxy", dataset_kind="corporate_action",
+        approval=selected, approval_resolution_as_of=NOW, coverage_start=date(2024, 1, 1),
+        coverage_end=date(2026, 9, 9), row_count=5, symbol_count=2,
+        raw_payload_hashes=("a" * 64,), normalized_content_hashes=("b" * 64,),
+        fact_content_hashes=("c" * 64,), normalizer_version="v1",
+        availability_policy_version="corporate-action-availability-v1", quality_findings=(),
+        pit_validation_status="PASS", rule_compliance_status="PASS", pagination_complete=True,
+        audit_policy_id="audit", endpoint_identities=("dividend",), receipt_hashes=("receipt",),
+        approval_policy_id="approval-policy-v1", availability_evidence_id="pit-id",
+    )
+    with pytest.raises(ManifestError, match="corporate action manifest"):
+        DatasetManifestV1.create(**common)
+    result = DatasetManifestV1.create(
+        **common, supported_action_types=("BONUS_SHARE", "CASH_DIVIDEND"),
+        unsupported_action_types=("RIGHTS_ISSUE", "SHARE_CONVERSION", "STOCK_SPLIT"),
+        validated_coverage_by_action_type=(("CASH_DIVIDEND", date(2024,1,1), date(2026,9,9)),),
+        materialized_coverage_by_action_type=(("CASH_DIVIDEND", date(2024,1,1), date(2026,9,9)),),
+        coverage_gaps=((date(2010,1,4), date(2023,12,31), "pending"),),
+        unsupported_intervals=(("RIGHTS_ISSUE", date(2010,1,4), date(2026,9,9)),),
+        latest_approved_session=date(2026,9,9),
+    )
+    assert result.latest_approved_session == date(2026,9,9)
