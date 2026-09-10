@@ -1,5 +1,4 @@
-from datetime import date, datetime
-from zoneinfo import ZoneInfo
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
@@ -10,7 +9,7 @@ from v5_2.data.real_audits.corporate_action_availability import (
 )
 
 
-CN = ZoneInfo("Asia/Shanghai")
+CN = timezone(timedelta(hours=8), "Asia/Shanghai")
 POLICY = CorporateActionAvailabilityPolicyV1(
     approved_sessions=(
         date(2024, 6, 3), date(2024, 6, 4), date(2024, 6, 5),

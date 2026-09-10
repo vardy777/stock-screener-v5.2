@@ -1,6 +1,5 @@
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
-from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -11,7 +10,7 @@ from v5_2.data.real_audits.corporate_action_adjustment import (
 )
 
 
-CN = ZoneInfo("Asia/Shanghai")
+CN = timezone(timedelta(hours=8), "Asia/Shanghai")
 
 
 def make_fact(kind, value, available):
@@ -40,4 +39,3 @@ def test_final_adjusted_input_is_rejected():
         CausalCorporateActionAdjustmentPolicyV1().effects_for_bar(
             bar={"close": 10, "adjustment": "qfq"}, session=date(2024, 6, 10),
             as_of=datetime(2024, 6, 10, 16, 30, tzinfo=CN), facts=())
-

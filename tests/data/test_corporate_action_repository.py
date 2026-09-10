@@ -1,6 +1,5 @@
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
-from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -8,7 +7,7 @@ from v5_2.data.corporate_action_facts import ActionType, CorporateActionFactV1, 
 from v5_2.data.corporate_action_repository import CorporateActionRepository, NotResearchSafeError
 
 
-CN = ZoneInfo("Asia/Shanghai")
+CN = timezone(timedelta(hours=8), "Asia/Shanghai")
 
 
 def fact(source_id, available_day, *, supersedes=None, cancelled=False):
@@ -58,4 +57,3 @@ def test_invalid_approval_or_manifest_fails_closed():
     with pytest.raises(NotResearchSafeError):
         repo.query("600000.SH", date(2024, 1, 1), date(2024, 1, 31), ActionType.CASH_DIVIDEND,
                    datetime(2025, 1, 1, tzinfo=CN))
-

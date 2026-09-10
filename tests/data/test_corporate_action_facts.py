@@ -1,7 +1,6 @@
 from dataclasses import replace
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
-from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -13,7 +12,7 @@ from v5_2.data.corporate_action_facts import (
 )
 
 
-CN = ZoneInfo("Asia/Shanghai")
+CN = timezone(timedelta(hours=8), "Asia/Shanghai")
 
 
 def make_fact(**overrides):
@@ -80,4 +79,3 @@ def test_fact_requires_an_economic_date_and_type_specific_value():
         make_fact(ex_date=None, effective_date=None)
     with pytest.raises(CorporateActionFactError, match="cash_per_share"):
         make_fact(cash_per_share=None)
-

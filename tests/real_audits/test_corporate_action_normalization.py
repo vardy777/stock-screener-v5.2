@@ -1,5 +1,4 @@
-from datetime import date, datetime
-from zoneinfo import ZoneInfo
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
@@ -11,7 +10,7 @@ from v5_2.data.real_audits.corporate_action_normalization import (
 )
 
 
-CN = ZoneInfo("Asia/Shanghai")
+CN = timezone(timedelta(hours=8), "Asia/Shanghai")
 POLICY = CorporateActionAvailabilityPolicyV1(
     approved_sessions=(date(2024, 6, 3), date(2024, 6, 4), date(2024, 6, 10), date(2024, 6, 11))
 )
@@ -32,4 +31,3 @@ def test_normalizer_rejects_nonimplemented_unknown_or_effective_only_rows():
     for change in ({"div_proc": "预案"}, {"ts_code": ""}, {"ann_date": ""}):
         with pytest.raises(CorporateActionNormalizationError):
             normalize_dividend_rows(({**base, **change},), source_version_identity="schema-v1", policy=POLICY)
-

@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime, time
-from zoneinfo import ZoneInfo
+from datetime import date, datetime, time, timedelta, timezone
 
 from v5_2.data.corporate_action_facts import KnowledgeClass
 
@@ -25,7 +24,7 @@ class CorporateActionAvailabilityPolicyV1:
         if approved_sessions != tuple(sorted(set(approved_sessions))):
             raise AvailabilityError("approved sessions must be canonical")
         self._sessions = approved_sessions
-        self._timezone = ZoneInfo("Asia/Shanghai")
+        self._timezone = timezone(timedelta(hours=8), "Asia/Shanghai")
 
     def _next_safe(self, day: date) -> datetime:
         next_session = next((session for session in self._sessions if session > day), None)
