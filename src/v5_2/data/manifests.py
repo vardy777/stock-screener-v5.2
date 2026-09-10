@@ -50,6 +50,7 @@ class DatasetManifestV1:
     exception_policy_id: str | None
     exception_set_hash: str | None
     cross_source_evidence_id: str | None
+    availability_evidence_id: str | None
     manifest_hash: str
 
     @classmethod
@@ -90,6 +91,7 @@ class DatasetManifestV1:
         exception_policy_id: str | None = None,
         exception_set_hash: str | None = None,
         cross_source_evidence_id: str | None = None,
+        availability_evidence_id: str | None = None,
     ) -> DatasetManifestV1:
         approving = {ApprovalDecision.APPROVED, ApprovalDecision.APPROVED_WITH_RULES}
         if approval.decision not in approving:
@@ -136,6 +138,7 @@ class DatasetManifestV1:
             or not exception_policy_id
             or not exception_set_hash
             or not cross_source_evidence_id
+            or not availability_evidence_id
         ):
             raise ManifestError("daily bar manifest requires frozen governance and audit lineage")
         for name, value in (
@@ -182,6 +185,7 @@ class DatasetManifestV1:
             "exception_policy_id": exception_policy_id,
             "exception_set_hash": exception_set_hash,
             "cross_source_evidence_id": cross_source_evidence_id,
+            "availability_evidence_id": availability_evidence_id,
         }
         digest = content_hash(body)
         values = dict(body)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import dataclasses
+from types import MappingProxyType
 
 import pytest
 
@@ -25,6 +26,16 @@ def make_request(**changes: object) -> ProviderRequestV1:
 def test_canonical_json_has_stable_mapping_and_sequence_encoding() -> None:
     assert canonical_json({"b": [2, 1], "a": "中"}) == (
         b'{"a":"\xe4\xb8\xad","b":[2,1]}'
+    )
+
+
+def test_canonical_json_supports_dataclass_with_immutable_mapping() -> None:
+    @dataclasses.dataclass(frozen=True)
+    class Artifact:
+        rules: object
+
+    assert canonical_json(Artifact(MappingProxyType({"cutoff": "NEXT_SESSION_SAFE"}))) == (
+        b'{"rules":{"cutoff":"NEXT_SESSION_SAFE"}}'
     )
 
 

@@ -647,6 +647,127 @@ git diff --check
 PASS (line-ending notices only; no whitespace errors)
 ```
 
+## Phase 1B-2B Daily Bar Availability Semantics — 2026-09-10
+
+Starting HEAD: `209d9c5aaa4592193cd3c414d7b6fef25ddfdd97`.
+
+### Current-state audit and correction
+
+The previous `DailyBarFactV1.create()` implementation assigned
+`available_at = D 15:00 Asia/Shanghai` and policy
+`daily-bar-d-close-v1`. Its evidence established market close, not the time at
+which the provider's complete daily bar became available. The old Phase 1B-1
+publisher repeated that assertion in PIT evidence, approval rules and the
+manifest. This was a look-ahead risk for research between market close and
+provider publication.
+
+The retired publisher now fails closed. `DailyBarFactV1` requires an explicit,
+timezone-aware `available_at` and policy version. The minimal
+`DailyBarAvailabilityPolicyV1` converts an already validated rule into a time;
+it does not probe, approve or construct manifests.
+
+### Bounded provider probe
+
+```text
+provider = datahubco_tushare_proxy
+session = 2026-09-09
+probe window = 2026-09-10 08:14:46–08:14:51 Asia/Shanghai
+samples = 000001.SZ, 002001.SZ, 300750.SZ, 600000.SH, 600519.SH, 688981.SH
+strata = SZSE main, ChiNext, SSE main, STAR, high/low-liquidity representatives
+rounds = 2
+observations = 12
+complete observations = 12
+per-symbol semantic payload revisions = 0
+coverage-end next approved session = 2026-01-05
+```
+
+Every observation pins the actual raw provider payload, payload hash,
+acquisition receipt, requested time and frozen Phase 1B-1 source-version
+identity. A bar was complete only when `open/high/low/close/vol/amount`, symbol
+and session were all present. The two D+1 rounds had identical semantic payload
+identity per symbol.
+
+The probe does **not** prove a same-day provider cutoff or simultaneous
+full-market publication. It therefore cannot backfill D availability. The
+causally safe historical rule is:
+
+```text
+DailyBarAvailabilityPolicyV1
+basis = NEXT_SESSION_SAFE
+available_at = next approved trading session at 16:30 Asia/Shanghai
+availability artifact = 6877256040eb6abbea3e6c4434485aaa212f23eba7f675f9d088ce7e05850bcb
+complete = true
+```
+
+### Immutable supersession and gates
+
+The original value facts and raw payloads were not changed or downloaded
+again. All 2,481,310 facts pinned by the final Phase 1B-1 manifest were read
+locally, content-verified, and reissued in 5,260 immutable availability
+supersession shards. Price, volume, amount, source payload and effective
+identity were preserved; only `available_at`, policy version and consequent
+content identity changed.
+
+```text
+superseded approval = 1ead49dfaefdfb8e4e75c9d94170d440abe77986e3388a6e96e6805537c1173c
+revocation = 251045d57fe98731ad97ca98f69f74d7bc4d461f3c1962debd53303c0f8ccf64
+new approval = 7daf8a38391ebb27ef5675cce6e978b1b10823195b304eca84d719c3d5504724
+new manifest = 9f38b28b3b2a4f93a16fe80144a1b894fdbabc1afea0e9dbe58009d3bce051e4
+manifest rows = 2,481,310
+manifest fact shards = 5,260
+manifest availability policy = daily-bar-availability-v1
+manifest availability evidence = 6877256040eb6abbea3e6c4434485aaa212f23eba7f675f9d088ce7e05850bcb
+```
+
+```text
+DAILY BAR STRUCTURAL = PASS
+DAILY BAR VALUE SEMANTICS = PASS
+DAILY BAR AVAILABILITY = PASS
+DAILY BAR REVISION BEHAVIOR = PASS
+DAILY BAR SOURCE APPROVAL = APPROVED_WITH_RULES
+DATASET MANIFEST = 9f38b28b3b2a4f93a16fe80144a1b894fdbabc1afea0e9dbe58009d3bce051e4
+PHASE 1B-2B = PASS
+```
+
+Known limitation: this bounded D+1 probe deliberately does not establish the
+earliest same-day provider publication minute, symbol-level publication order,
+or a same-day full-market cutoff. Future stronger evidence may improve the
+rule only through immutable supersession. The planned 20:00 production
+acquisition remains separate and was not used to derive historical
+availability.
+
+### Verification commands and exact results
+
+```text
+.\.venv\Scripts\python.exe scripts\probe_daily_bar_availability.py
+ARTIFACT_ID=6877256040eb6abbea3e6c4434485aaa212f23eba7f675f9d088ce7e05850bcb; OBSERVATIONS=12; COMPLETE=true
+
+.\.venv\Scripts\python.exe scripts\publish_daily_bar_availability.py
+DAILY_BAR_AVAILABILITY=PASS; DAILY_BAR_REVISION_BEHAVIOR=PASS; APPROVED_WITH_RULES; ROWS=2481310; SHARDS=5260; DATASET_MANIFEST=PASS
+
+.\.venv\Scripts\python.exe -m pytest tests/real_audits/test_daily_bar_availability.py tests/data/test_daily_bar_facts.py tests/data/test_manifests.py tests/providers/test_request_identity.py -q
+39 passed in 0.06s
+
+.\.venv\Scripts\python.exe -m pytest -q
+336 passed in 10.77s
+
+.\.venv\Scripts\python.exe scripts\verify_standalone.py
+PASS forbidden imports: 0; PASS forbidden active paths/dependencies: 0; PASS prohibited repository inventory: 0; PASS phase 1a architecture boundary violations: 0
+
+.\.venv\Scripts\python.exe -m build
+Successfully built stock_screener_v5_2-5.2.0.tar.gz and stock_screener_v5_2-5.2.0-py3-none-any.whl
+
+.\.venv\Scripts\python.exe scripts\clean_room_acceptance.py
+clean_room_dependencies=true; clean_room_install=true; clean_room_tests=true; build=true; wheel_install=true; wheel_smoke=true; old_pythonpath_removed=true; zero_dependency_acceptance=true
+clean-room test_output: 336 passed in 128.97s (0:02:08)
+
+credential scan
+CREDENTIAL_SCAN_FINDINGS=0
+
+git diff --check
+PASS (line-ending notices only; no whitespace errors)
+```
+
 ## Phase 1B-2A PIT Final Closure — 2026-09-10
 
 Starting HEAD: `451f33d97a465b8ef20250f68980097fb2186107`.

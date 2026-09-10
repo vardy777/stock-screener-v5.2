@@ -236,6 +236,8 @@ def test_datahub_daily_bar_manifest_pins_frozen_governance_lineage() -> None:
         request_inventory_id="inventory-id", normalization_policy_id="normalization-id",
         unit_policy_id="unit-id", exception_policy_id="exception-policy-id",
         exception_set_hash="exception-set-hash", cross_source_evidence_id="cross-source-id",
+        availability_evidence_id="availability-evidence-id",
     )
     assert result.upstream_approval_ids == ("calendar-approval", "master-approval")
     assert result.request_inventory_id == "inventory-id"
+    assert result.availability_evidence_id == "availability-evidence-id"

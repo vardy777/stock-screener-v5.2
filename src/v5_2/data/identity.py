@@ -4,7 +4,7 @@ import hashlib
 import json
 import math
 from collections.abc import Mapping, Sequence
-from dataclasses import asdict, is_dataclass
+from dataclasses import fields, is_dataclass
 from datetime import date, datetime
 from enum import Enum
 from typing import Any
@@ -16,7 +16,7 @@ class CanonicalIdentityError(ValueError):
 
 def _canonical_value(value: Any) -> Any:
     if is_dataclass(value) and not isinstance(value, type):
-        return _canonical_value(asdict(value))
+        return _canonical_value({field.name: getattr(value, field.name) for field in fields(value)})
     if isinstance(value, Enum):
         return _canonical_value(value.value)
     if isinstance(value, datetime):
