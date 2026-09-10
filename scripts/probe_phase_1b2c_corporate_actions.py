@@ -12,7 +12,7 @@ from urllib.request import Request, urlopen
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from v5_2.data.identity import canonical_json  # noqa: E402
+from v5_2.data.identity import canonical_json, content_hash  # noqa: E402
 from v5_2.data.raw_artifacts import AcquisitionReceiptV1, RawArtifactStore, RawPayloadArtifactV1  # noqa: E402
 from v5_2.data.real_audits.corporate_action_probe import evaluate_probe_response  # noqa: E402
 from v5_2.providers.contracts import ProviderRequestV1  # noqa: E402
@@ -22,7 +22,7 @@ from v5_2.providers.credentials import load_datahub_credential  # noqa: E402
 BASE_URL = "http://datahubco.com/app-api/openapi/v1/tushare"
 RUNTIME = ROOT / "data" / "phase_1b2c"
 CANDIDATES = (
-    ("dividend", {"ts_code": "600000.SH", "start_date": "20240101", "end_date": "20261231", "limit": 3}),
+    ("dividend", {"ts_code": "600000.SH", "limit": 3}),
     ("rights", {"ts_code": "600000.SH", "start_date": "20100101", "end_date": "20261231", "limit": 3}),
     ("rights_issue", {"ts_code": "600000.SH", "start_date": "20100101", "end_date": "20261231", "limit": 3}),
     ("adj_factor", {"ts_code": "600000.SH", "start_date": "20260101", "end_date": "20261231", "limit": 3}),
@@ -84,7 +84,10 @@ def main() -> int:
         "schema_version": "CorporateActionProviderProbeBundleV1",
         "probes": tuple(asdict(probe) for probe in probes),
     }
-    _write_immutable(RUNTIME / "governance" / "provider_probe.json", artifact)
+    artifact_id = content_hash(artifact)
+    artifact = {"bundle_id": artifact_id, "content_hash": artifact_id, **artifact}
+    _write_immutable(RUNTIME / "governance" / f"provider-probe-{artifact_id}.json", artifact)
+    (RUNTIME / "governance" / "current-provider-probe-id.txt").write_text(artifact_id, encoding="ascii")
     for probe in probes:
         print(f"ENDPOINT={probe.endpoint} DISPOSITION={probe.disposition} ROWS={probe.row_count} FIELDS={','.join(probe.fields)}")
     return 0

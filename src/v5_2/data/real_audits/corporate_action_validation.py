@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from collections.abc import Mapping
 
 from v5_2.data.identity import content_hash
 from v5_2.data.real_audits.corporate_action_evidence import CorporateActionPITEvidenceV1
@@ -8,6 +9,19 @@ from v5_2.data.real_audits.corporate_action_evidence import CorporateActionPITEv
 
 class CorporateActionPublicationError(RuntimeError):
     """Frozen gate/approval artifacts do not authorize publication."""
+
+
+def verify_content_addressed_artifact(
+    artifact: Mapping[str, object], *, identity_field: str, expected_identity: str,
+) -> bool:
+    if artifact.get(identity_field) != expected_identity:
+        return False
+    if "content_hash" in artifact and artifact.get("content_hash") != expected_identity:
+        return False
+    body = dict(artifact)
+    body.pop(identity_field, None)
+    body.pop("content_hash", None)
+    return content_hash(body) == expected_identity
 
 
 @dataclass(frozen=True, slots=True)

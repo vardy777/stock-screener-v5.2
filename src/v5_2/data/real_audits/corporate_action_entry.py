@@ -45,21 +45,20 @@ def build_corporate_action_inventory(
         raise CorporateActionEntryError("upstream approval is revoked")
     if any(identifier not in active for identifier in upstream_approval_ids):
         raise CorporateActionEntryError("upstream approval is inactive")
-    segments = (
-        ("BASELINE", target_history_start, baseline_validation_end),
-        ("CATCH_UP", date(2026, 1, 1), rolling_coverage_end),
-    )
     requests = []
-    fields = ("ts_code", "end_date", "ann_date", "div_proc", "stk_div", "cash_div_tax", "ex_date", "imp_ann_date")
+    fields = (
+        "ts_code", "end_date", "ann_date", "div_proc", "stk_div", "stk_bo_rate",
+        "stk_co_rate", "cash_div", "cash_div_tax", "record_date", "ex_date",
+        "pay_date", "div_listdate", "imp_ann_date",
+    )
     for symbol in symbols:
-        for segment, start, end in segments:
-            request = ProviderRequestV1.create(
-                source_name="datahubco_tushare_proxy", dataset_kind="corporate_action",
-                endpoint=endpoint, parameters={"ts_code": symbol, "start_date": start.strftime("%Y%m%d"), "end_date": end.strftime("%Y%m%d"), "fields": ",".join(fields)},
-                requested_fields=fields, page_size=5000,
-                request_policy_version="phase-1b2c-corporate-action-v1",
-            )
-            requests.append(SegmentedCorporateActionRequestV1(segment, symbol, request))
+        request = ProviderRequestV1.create(
+            source_name="datahubco_tushare_proxy", dataset_kind="corporate_action",
+            endpoint=endpoint, parameters={"ts_code": symbol, "fields": ",".join(fields)},
+            requested_fields=fields, page_size=2000,
+            request_policy_version="phase-1b2c-corporate-action-v2",
+        )
+        requests.append(SegmentedCorporateActionRequestV1("FULL_HISTORY", symbol, request))
     identity = {
         "target_history_start": target_history_start,
         "baseline_validation_end": baseline_validation_end,
@@ -73,4 +72,3 @@ def build_corporate_action_inventory(
         inventory_id=digest, content_hash=digest, requests=tuple(requests),
         **{key: value for key, value in identity.items() if key != "request_ids"},
     )
-

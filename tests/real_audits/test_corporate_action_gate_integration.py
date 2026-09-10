@@ -8,6 +8,7 @@ from v5_2.data.real_audits.corporate_action_validation import (
     authorize_corporate_action_publication,
     evaluate_corporate_action_gates,
     gate_artifact_id,
+    verify_content_addressed_artifact,
 )
 import pytest
 
@@ -72,3 +73,14 @@ def test_gate_artifact_identity_changes_when_a_gate_disposition_changes():
         catch_up="PASS", incremental="PASS", exception_budget="PASS", systematic_defect="PASS")
     pending = replace(passing, catch_up_2026="PENDING", source_approval="PENDING", publication_allowed=False)
     assert gate_artifact_id(passing, evidence().evidence_id) != gate_artifact_id(pending, evidence().evidence_id)
+
+
+def test_pinned_supporting_artifact_tamper_fails_integrity():
+    from v5_2.data.identity import content_hash
+
+    body = {"schema_version": "LedgerV1", "entries": ({"disposition": "MATCH"},)}
+    identity = content_hash(body)
+    artifact = {"ledger_id": identity, "content_hash": identity, **body}
+    assert verify_content_addressed_artifact(artifact, identity_field="ledger_id", expected_identity=identity)
+    artifact["entries"] = ({"disposition": "MISMATCH"},)
+    assert not verify_content_addressed_artifact(artifact, identity_field="ledger_id", expected_identity=identity)

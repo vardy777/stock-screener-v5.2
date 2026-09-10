@@ -1,5 +1,6 @@
 build==1.2.2.post1
 packaging==24.2
+pdfplumber==0.11.9
 pluggy==1.5.0
 pyproject_hooks==1.2.0
 pytest==8.3.5

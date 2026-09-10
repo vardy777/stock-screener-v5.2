@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from datetime import date
+import json
 from pathlib import Path
 import sys
 
@@ -12,10 +13,18 @@ sys.path.insert(0, str(ROOT / "src"))
 from v5_2.data.corporate_action_facts import ActionType  # noqa: E402
 from v5_2.data.identity import canonical_json  # noqa: E402
 from v5_2.data.real_audits.corporate_action_evidence import CorporateActionPITEvidenceV1  # noqa: E402
-from v5_2.data.real_audits.corporate_action_validation import evaluate_corporate_action_gates, gate_artifact_id  # noqa: E402
+from v5_2.data.real_audits.corporate_action_validation import (  # noqa: E402
+    evaluate_corporate_action_gates,
+    gate_artifact_id,
+    verify_content_addressed_artifact,
+)
 
 
 RUNTIME = ROOT / "data" / "phase_1b2c" / "governance"
+PIT_EVIDENCE_ID = "5585752463919df94331ac6b78a59deeaa6f149ef4da3791f30fac572b49f18b"
+CROSS_SOURCE_ID = "4af7b6a644b1ef1ddb97bc2ba80703ff1903e3402580c5a6d7e36a491d57f6dc"
+REVISION_AUDIT_ID = "a7a83e96d803fdb5e038b8e76b5a9d9f36760282e5c2eea09d902edd3cede1f4"
+MATERIALIZATION_ID = "35c785138157edb0148d1f8e349ad252a369752c8e668476fdf6190e53f62aef"
 
 
 def _write(path: Path, value: object) -> None:
@@ -28,26 +37,41 @@ def _write(path: Path, value: object) -> None:
 
 
 def main() -> int:
-    unsupported = (ActionType.RIGHTS_ISSUE, ActionType.STOCK_SPLIT, ActionType.SHARE_CONVERSION)
-    evidence = CorporateActionPITEvidenceV1.create(
-        target_history_start=date(2010, 1, 4), baseline_validation_end=date(2025, 12, 31),
-        rolling_coverage_end=date(2026, 9, 9), source_name="datahubco_tushare_proxy",
-        source_version_identity="datahub-dividend-probe-2026-09-10-v1",
-        supported_action_types=(ActionType.CASH_DIVIDEND, ActionType.BONUS_SHARE),
-        unsupported_action_types=unsupported,
-        validated_coverage_by_action_type=(), materialized_coverage_by_action_type=(),
-        coverage_gaps=((date(2010, 1, 4), date(2026, 9, 9), "bounded probe only; acquisition and independent validation pending"),),
-        unsupported_intervals=tuple((kind, date(2010, 1, 4), date(2026, 9, 9)) for kind in unsupported),
-        cross_source_evidence_ids=(), exception_ids=(), quarantine_ids=("unsupported-action-types",),
-        publication_rule="historical-date-only-next-approved-session-1630-asia-shanghai",
-        economic_effect_rule="ex-or-effective-date-separate-from-knowledge-time",
-        revision_rule="latest-then-known-source-version",
-        cancellation_rule="retain-announcement-history-no-economic-effect", complete=False,
+    raw = json.loads((RUNTIME / f"pit-evidence-{PIT_EVIDENCE_ID}.json").read_text(encoding="utf-8"))
+    if raw.get("evidence_id") != PIT_EVIDENCE_ID or raw.get("content_hash") != PIT_EVIDENCE_ID:
+        raise RuntimeError("PIT evidence identity mismatch")
+    for field in ("target_history_start", "baseline_validation_end", "rolling_coverage_end"):
+        raw[field] = date.fromisoformat(raw[field])
+    for field in ("supported_action_types", "unsupported_action_types"):
+        raw[field] = tuple(ActionType(value) for value in raw[field])
+    for field in ("validated_coverage_by_action_type", "materialized_coverage_by_action_type", "unsupported_intervals"):
+        raw[field] = tuple((ActionType(kind), date.fromisoformat(start), date.fromisoformat(end)) for kind, start, end in raw[field])
+    raw["coverage_gaps"] = tuple((date.fromisoformat(start), date.fromisoformat(end), reason) for start, end, reason in raw["coverage_gaps"])
+    for field in ("cross_source_evidence_ids", "exception_ids", "quarantine_ids"):
+        raw[field] = tuple(raw[field])
+    evidence = CorporateActionPITEvidenceV1(**raw)
+    cross_source = json.loads((RUNTIME / f"cross-source-{CROSS_SOURCE_ID}.json").read_text(encoding="utf-8"))
+    revision = json.loads((RUNTIME / f"revision-audit-{REVISION_AUDIT_ID}.json").read_text(encoding="utf-8"))
+    materialization = json.loads((RUNTIME / f"materialization-audit-{MATERIALIZATION_ID}.json").read_text(encoding="utf-8"))
+    pinned = set(evidence.cross_source_evidence_ids)
+    cross_status = "PASS" if (
+        CROSS_SOURCE_ID in pinned
+        and verify_content_addressed_artifact(cross_source, identity_field="ledger_id", expected_identity=CROSS_SOURCE_ID)
+        and all(item.get("disposition") == "MATCH" for item in cross_source.get("entries", ()))
+    ) else "FAIL"
+    revision_status = "PASS" if (
+        REVISION_AUDIT_ID in pinned
+        and verify_content_addressed_artifact(revision, identity_field="revision_audit_id", expected_identity=REVISION_AUDIT_ID)
+        and revision.get("revision_status") == "PASS_SCOPED_FINAL_IMPLEMENTED_ONLY"
+    ) else "FAIL"
+    materialization_valid = (
+        MATERIALIZATION_ID in pinned
+        and verify_content_addressed_artifact(materialization, identity_field="audit_id", expected_identity=MATERIALIZATION_ID)
     )
+    catch_up_status = str(materialization.get("catch_up_2026_status") or "PENDING") if materialization_valid else "FAIL"
     gate = evaluate_corporate_action_gates(
-        evidence, cross_source="PENDING", revision="PENDING", adjustment="PASS",
-        catch_up="PENDING", incremental="PASS", exception_budget="PASS", systematic_defect="PASS")
-    _write(RUNTIME / f"pit-evidence-{evidence.evidence_id}.json", asdict(evidence))
+        evidence, cross_source=cross_status, revision=revision_status, adjustment="PASS",
+        catch_up=catch_up_status, incremental="PASS", exception_budget="PASS", systematic_defect="PASS")
     gate_body = {"evidence_id": evidence.evidence_id, **asdict(gate)}
     gate_id = gate_artifact_id(gate, evidence.evidence_id)
     _write(RUNTIME / f"gate-{gate_id}.json", gate_body)

@@ -1389,3 +1389,205 @@ before source comparison, acquire the target universe for the actual supported
 endpoint, validate historical and 2026 coverage, complete independent
 cross-source and revision/cancellation evidence, then rerun the existing gates.
 No threshold or governance relaxation is authorized.
+
+## Phase 1B-2C Evidence Closure — 2026-09-10
+
+Starting HEAD: `99c7f39b5fce0f0f6a209386abe321c9165821b1`.
+
+This run retained the existing corporate-action architecture and corrected two
+evidence-exposed implementation defects. The `dividend` endpoint does not accept
+the previously used generic `start_date` / `end_date` request segmentation, so
+the production inventory now issues one deterministic full-history request per
+security. Normalization now maps `stk_bo_rate` to bonus shares and rejects every
+row with positive `stk_co_rate`; aggregate `stk_div` is not treated as a pure
+bonus-share value because it can include share conversion. These meanings match
+the documented Tushare dividend schema and were then checked against actual
+DataHub rows rather than inferred from field names.
+
+### Frozen sample and independent evidence
+
+The deterministic sample was frozen before any CNINFO comparison in this run:
+
+```text
+sample_inventory_id = 90354c25bb7529048a2a391ba06e8e4cfb5daf732f9b6abcca94189fa13023c5
+candidate cohort = 20 securities
+candidate provider rows = 1,368
+frozen samples = 14
+ordinary cash = 8
+cash + bonus = 6
+pure bonus = 0 (no qualifying frozen-cohort candidate)
+periods = EARLY 4; MIDDLE 4; RECENT 4; CATCH_UP_2026 2
+exchanges = SZ 8; SH 6
+selection = lowest two content hashes per action/period stratum
+```
+
+CNINFO-hosted issuer PDFs were downloaded, hashed, text-extracted and
+mechanically checked for identity, implementation-announcement semantics,
+pre-tax cash per share, bonus ratio, record date and ex-date. The parser has
+regressions for early SZSE per-ten-share wording, SSE per-share tables, slash and
+Chinese dates, cash/bonus order, and cancelled announcements. A cancelled PDF
+cannot control the final disposition. Final result:
+
+```text
+cross_source_ledger_id = 4af7b6a644b1ef1ddb97bc2ba80703ff1903e3402580c5a6d7e36a491d57f6dc
+TOTAL = 14
+MATCH = 14
+MISMATCH = 0
+UNAVAILABLE = 0
+UNRESOLVED = 0
+```
+
+The 000333.SZ chain preserves the cancelled implementation document
+`05318019dc466d32e768e8f44285049d9745a982a89b45e67683d27c147931ed`
+and the matching updated document
+`3ae86625494a29dbf4f5032d366698e9c428a93811083c57230420f76670ee1c`.
+The cancelled evidence remains immutable and is not reinterpreted as current.
+
+### Provider schema and full acquisition
+
+The corrected live schema probe returned three real dividend rows and all
+documented fields:
+
+```text
+provider_probe_id = 2e6b8466c3d75411a0dece848425a203eef03a49538657ec3c519026d536bb24
+dividend = SUPPORTED; rows=3
+rights = UNSUPPORTED
+rights_issue = UNSUPPORTED
+adj_factor = AUDIT_ONLY
+share_float = UNSUPPORTED for corporate-action truth
+```
+
+The full-history inventory was built from the approved 5,548-security historical
+universe. Every request used immutable raw payloads, receipts, bounded retry,
+shared deterministic rate limiting and checkpoint/resume.
+
+```text
+full_history_inventory_id = 854bd60b9d5084b2446d02f2154262e07660bd4eaecd73939d6cbe7cade695bf
+acquisition_summary_id = 139298428aef7f08add358c49c01fb1a2796a78543abf5fa90c7b0825c285876
+requests = 5,548
+pages = 5,548
+raw rows = 262,935
+workflow rows: proposal=78,295; shareholder-approved=124,532; implemented=58,242
+stopped=130; rejected=103; shareholder-rejected=177; pre-disclosure=1,243; shareholder-proposed=210; other=3
+```
+
+Implementation identity is `(ts_code, end_date, ex_date, imp_ann_date)`.
+Equivalent workflow copies collapse deterministically to the most complete row.
+Rows with conflicting economics, missing implementation identity, unsupported
+conversion, or missing approved availability inputs are explicitly quarantined.
+
+```text
+materialization_audit_id = 35c785138157edb0148d1f8e349ad252a369752c8e668476fdf6190e53f62aef
+unapproved_candidate_bundle_id = 60dc41078996a522762e30584d3f504a4e386547551975eec6d2a3ba3d95c708
+selected implemented events = 38,894
+staging candidate facts = 36,033
+cash candidate facts = 35,517
+bonus candidate facts = 516
+candidate symbols = 5,074
+quarantines = 11,262
+unsupported share conversion = 7,894
+conflicting implemented economics = 2
+incomplete implementation identity = 1
+2026 approved-session-calendar missing = 3,365
+approved facts = 0
+```
+
+The 600989.SH differential-dividend case proves why conflicting values cannot be
+resolved by selecting an arbitrary provider row. The official implementation
+notice contains different per-share amounts for different shareholder classes;
+the event is quarantined. No provider final `adj_factor` becomes research truth.
+
+### PIT, revision and coverage conclusion
+
+For the validated 2010-01-04 through 2025-12-31 baseline, `imp_ann_date` was
+independently tied to the implementation disclosure. Because it is date-only,
+`CorporateActionAvailabilityPolicyV1` assigns the next approved trading session
+at 16:30 Asia/Shanghai. Acquisition time is never used as historical
+`available_at`; `ex_date` remains a separate economic-effect date.
+
+Revision approval is scoped to final implemented dividend facts only. Proposal,
+approval, stopped and cancelled workflow rows remain retained evidence but are
+not published. Equivalent duplicates collapse; the two unresolved economic
+conflicts and all conversion events are quarantined. Historical pre-implementation
+proposal state is explicitly outside the approved fact scope and cannot appear
+before the implementation announcement's next-safe-session cutoff.
+
+```text
+revision_audit_id = a7a83e96d803fdb5e038b8e76b5a9d9f36760282e5c2eea09d902edd3cede1f4
+pit_evidence_id = 5585752463919df94331ac6b78a59deeaa6f149ef4da3791f30fac572b49f18b
+
+validated/materialized CASH_DIVIDEND = 2010-01-04 .. 2025-12-31
+validated/materialized BONUS_SHARE = 2010-01-04 .. 2025-12-31
+RIGHTS_ISSUE = UNSUPPORTED
+STOCK_SPLIT = UNSUPPORTED
+SHARE_CONVERSION = UNSUPPORTED
+2026-01-01 .. 2026-09-09 = coverage gap
+```
+
+The 2026 provider records were acquired, but the currently approved trading
+calendar and approved target universe both end at 2025-12-31. Therefore the
+3,365 2026 candidate events cannot receive a research-safe next approved session
+without expanding an upstream approval. They remain quarantined and the catch-up
+gate remains `PENDING`; no weekday inference or acquisition-time backfill was
+used. This is the sole dataset-level blocker after baseline evidence closure.
+
+The formal evaluator loads the exact PIT, cross-source, revision and
+materialization artifacts and recomputes:
+
+```text
+CORPORATE ACTION STRUCTURAL = PASS
+CORPORATE ACTION PIT = PASS
+CORPORATE ACTION CROSS_SOURCE = PASS
+CORPORATE ACTION REVISION = PASS
+ADJUSTMENT SEMANTICS = PASS
+ROLLING COVERAGE MODEL = PASS
+2026 CATCH-UP = PENDING
+PRODUCTION INCREMENTAL READINESS = PASS
+EXCEPTION BUDGET = PASS
+SYSTEMATIC DEFECT = PASS
+SOURCE APPROVAL = PENDING
+PUBLICATION_ALLOWED = false
+APPROVED_FACTS = 0
+DATASET_MANIFEST = none
+PHASE 1B-2C = NOT CLOSED
+```
+
+The publisher consumed that frozen PENDING gate and emitted zero facts/no
+manifest. No SourceApprovalArtifact or DatasetManifest was created, and Phase
+1B-2D was not started.
+
+### Verification
+
+```text
+.\.venv\Scripts\python.exe -m pytest -q
+383 passed in 14.61s
+
+.\.venv\Scripts\python.exe scripts\verify_standalone.py
+PASS forbidden imports: 0
+PASS forbidden active paths/dependencies: 0
+PASS prohibited repository inventory: 0
+PASS phase 1a architecture boundary violations: 0
+
+.\.venv\Scripts\python.exe -m build
+Successfully built stock_screener_v5_2-5.2.0.tar.gz and stock_screener_v5_2-5.2.0-py3-none-any.whl
+
+.\.venv\Scripts\python.exe scripts\clean_room_acceptance.py
+clean_room_dependencies=true; clean_room_install=true; clean_room_tests=true
+build=true; wheel_install=true; wheel_smoke=true
+old_pythonpath_removed=true; zero_dependency_acceptance=true
+clean-room test_output: 383 passed in 187.55s (0:03:07)
+archive findings: none
+
+credential sentinel scan across repository runtime areas
+CREDENTIAL_SCAN_FINDINGS=0; SENTINELS=1; ENV_IGNORED=true
+
+git diff --check
+PASS (line-ending notices only; no whitespace errors)
+```
+
+The official-PDF audit dependency is explicit and reproducible:
+`pdfplumber==0.11.9` is pinned in `requirements.lock` and the `audit` optional
+dependency group. The final clean-room run above includes that declaration.
+The formal evaluator also recomputes the content identity of the pinned
+cross-source, revision and materialization artifacts; a regression test proves
+that a payload changed under an unchanged claimed ID fails integrity.
