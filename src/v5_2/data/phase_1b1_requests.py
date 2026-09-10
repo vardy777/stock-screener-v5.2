@@ -59,3 +59,26 @@ def phase_1b1_requests():
             "daily_bar": (),
         }
     )
+
+
+def phase_1b1_2026_extension_requests(*, end_date: str):
+    """Bounded rolling requests; the end is supplied by the evaluation run."""
+    if len(end_date) != 8 or not end_date.isdigit() or end_date < "20260101":
+        raise ValueError("extension end_date must be YYYYMMDD in 2026 or later")
+    calendar_fields = ("exchange", "cal_date", "is_open", "pretrade_date")
+    calendars = tuple(
+        _request("trade_calendar", "trade-cal", {
+            "exchange": exchange, "start_date": "20260101", "end_date": end_date,
+            "fields": ",".join(calendar_fields),
+        }, calendar_fields) for exchange in ("SSE", "SZSE")
+    )
+    master_fields = (
+        "ts_code", "symbol", "name", "market", "exchange", "list_status",
+        "list_date", "delist_date",
+    )
+    masters = tuple(
+        _request("security_master", "stock-basic", {
+            "exchange": exchange, "list_status": status, "fields": ",".join(master_fields),
+        }, master_fields) for exchange in ("SSE", "SZSE") for status in ("L", "D", "P")
+    )
+    return MappingProxyType({"trade_calendar": calendars, "security_master": masters})

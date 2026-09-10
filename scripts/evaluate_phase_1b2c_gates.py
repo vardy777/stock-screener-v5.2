@@ -21,10 +21,7 @@ from v5_2.data.real_audits.corporate_action_validation import (  # noqa: E402
 
 
 RUNTIME = ROOT / "data" / "phase_1b2c" / "governance"
-PIT_EVIDENCE_ID = "5585752463919df94331ac6b78a59deeaa6f149ef4da3791f30fac572b49f18b"
 CROSS_SOURCE_ID = "4af7b6a644b1ef1ddb97bc2ba80703ff1903e3402580c5a6d7e36a491d57f6dc"
-REVISION_AUDIT_ID = "a7a83e96d803fdb5e038b8e76b5a9d9f36760282e5c2eea09d902edd3cede1f4"
-MATERIALIZATION_ID = "35c785138157edb0148d1f8e349ad252a369752c8e668476fdf6190e53f62aef"
 
 
 def _write(path: Path, value: object) -> None:
@@ -37,8 +34,11 @@ def _write(path: Path, value: object) -> None:
 
 
 def main() -> int:
-    raw = json.loads((RUNTIME / f"pit-evidence-{PIT_EVIDENCE_ID}.json").read_text(encoding="utf-8"))
-    if raw.get("evidence_id") != PIT_EVIDENCE_ID or raw.get("content_hash") != PIT_EVIDENCE_ID:
+    pit_evidence_id = (RUNTIME / "current-pit-evidence-id.txt").read_text(encoding="ascii").strip()
+    revision_audit_id = (RUNTIME / "current-revision-audit-id.txt").read_text(encoding="ascii").strip()
+    materialization_id = (RUNTIME / "current-materialization-id.txt").read_text(encoding="ascii").strip()
+    raw = json.loads((RUNTIME / f"pit-evidence-{pit_evidence_id}.json").read_text(encoding="utf-8"))
+    if raw.get("evidence_id") != pit_evidence_id or raw.get("content_hash") != pit_evidence_id:
         raise RuntimeError("PIT evidence identity mismatch")
     for field in ("target_history_start", "baseline_validation_end", "rolling_coverage_end"):
         raw[field] = date.fromisoformat(raw[field])
@@ -51,8 +51,8 @@ def main() -> int:
         raw[field] = tuple(raw[field])
     evidence = CorporateActionPITEvidenceV1(**raw)
     cross_source = json.loads((RUNTIME / f"cross-source-{CROSS_SOURCE_ID}.json").read_text(encoding="utf-8"))
-    revision = json.loads((RUNTIME / f"revision-audit-{REVISION_AUDIT_ID}.json").read_text(encoding="utf-8"))
-    materialization = json.loads((RUNTIME / f"materialization-audit-{MATERIALIZATION_ID}.json").read_text(encoding="utf-8"))
+    revision = json.loads((RUNTIME / f"revision-audit-{revision_audit_id}.json").read_text(encoding="utf-8"))
+    materialization = json.loads((RUNTIME / f"materialization-audit-{materialization_id}.json").read_text(encoding="utf-8"))
     pinned = set(evidence.cross_source_evidence_ids)
     cross_status = "PASS" if (
         CROSS_SOURCE_ID in pinned
@@ -60,13 +60,13 @@ def main() -> int:
         and all(item.get("disposition") == "MATCH" for item in cross_source.get("entries", ()))
     ) else "FAIL"
     revision_status = "PASS" if (
-        REVISION_AUDIT_ID in pinned
-        and verify_content_addressed_artifact(revision, identity_field="revision_audit_id", expected_identity=REVISION_AUDIT_ID)
+        revision_audit_id in pinned
+        and verify_content_addressed_artifact(revision, identity_field="revision_audit_id", expected_identity=revision_audit_id)
         and revision.get("revision_status") == "PASS_SCOPED_FINAL_IMPLEMENTED_ONLY"
     ) else "FAIL"
     materialization_valid = (
-        MATERIALIZATION_ID in pinned
-        and verify_content_addressed_artifact(materialization, identity_field="audit_id", expected_identity=MATERIALIZATION_ID)
+        materialization_id in pinned
+        and verify_content_addressed_artifact(materialization, identity_field="audit_id", expected_identity=materialization_id)
     )
     catch_up_status = str(materialization.get("catch_up_2026_status") or "PENDING") if materialization_valid else "FAIL"
     gate = evaluate_corporate_action_gates(

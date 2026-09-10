@@ -19,7 +19,6 @@ INVENTORY_ID = "90354c25bb7529048a2a391ba06e8e4cfb5daf732f9b6abcca94189fa13023c5
 CROSS_SOURCE_ID = "4af7b6a644b1ef1ddb97bc2ba80703ff1903e3402580c5a6d7e36a491d57f6dc"
 PROBE_ID = "2e6b8466c3d75411a0dece848425a203eef03a49538657ec3c519026d536bb24"
 ACQUISITION_ID = "139298428aef7f08add358c49c01fb1a2796a78543abf5fa90c7b0825c285876"
-MATERIALIZATION_ID = "35c785138157edb0148d1f8e349ad252a369752c8e668476fdf6190e53f62aef"
 RUNTIME = ROOT / "data" / "phase_1b2c" / "governance"
 
 
@@ -40,19 +39,20 @@ def _verified(path: Path, identity_field: str, expected: str) -> dict:
 
 
 def main() -> int:
+    materialization_id = (RUNTIME / "current-materialization-id.txt").read_text(encoding="ascii").strip()
     inventory = _verified(RUNTIME / f"sample-inventory-{INVENTORY_ID}.json", "inventory_id", INVENTORY_ID)
     ledger = _verified(RUNTIME / f"cross-source-{CROSS_SOURCE_ID}.json", "ledger_id", CROSS_SOURCE_ID)
     if ledger.get("inventory_id") != INVENTORY_ID or len(ledger.get("entries", ())) != len(inventory.get("samples", ())):
         raise RuntimeError("cross-source ledger does not bind the frozen inventory")
     if any(entry.get("disposition") != "MATCH" for entry in ledger["entries"]):
         raise RuntimeError("cross-source evidence is incomplete")
-    materialization = _verified(RUNTIME / f"materialization-audit-{MATERIALIZATION_ID}.json", "audit_id", MATERIALIZATION_ID)
+    materialization = _verified(RUNTIME / f"materialization-audit-{materialization_id}.json", "audit_id", materialization_id)
 
     revision_body = {
         "schema_version": "CorporateActionRevisionAuditV1",
         "provider_probe_id": PROBE_ID,
         "acquisition_summary_id": ACQUISITION_ID,
-        "materialization_audit_id": MATERIALIZATION_ID,
+        "materialization_audit_id": materialization_id,
         "event_identity": ("ts_code", "end_date", "ex_date", "imp_ann_date"),
         "accepted_scope": "final implemented dividend facts only",
         "provider_workflow_rows_retained_but_not_published": True,
@@ -79,16 +79,16 @@ def main() -> int:
         supported_action_types=(ActionType.CASH_DIVIDEND, ActionType.BONUS_SHARE),
         unsupported_action_types=unsupported,
         validated_coverage_by_action_type=(
-            (ActionType.CASH_DIVIDEND, date(2010, 1, 4), date(2025, 12, 31)),
-            (ActionType.BONUS_SHARE, date(2010, 1, 4), date(2025, 12, 31)),
+            (ActionType.CASH_DIVIDEND, date(2010, 1, 4), date(2026, 9, 9)),
+            (ActionType.BONUS_SHARE, date(2010, 1, 4), date(2026, 9, 9)),
         ),
         materialized_coverage_by_action_type=(
-            (ActionType.CASH_DIVIDEND, date(2010, 1, 4), date(2025, 12, 31)),
-            (ActionType.BONUS_SHARE, date(2010, 1, 4), date(2025, 12, 31)),
+            (ActionType.CASH_DIVIDEND, date(2010, 1, 4), date(2026, 9, 9)),
+            (ActionType.BONUS_SHARE, date(2010, 1, 4), date(2026, 9, 9)),
         ),
-        coverage_gaps=((date(2026, 1, 1), date(2026, 9, 9), "approved calendar and target universe end at 2025-12-31"),),
+        coverage_gaps=(),
         unsupported_intervals=tuple((kind, date(2010, 1, 4), date(2026, 9, 9)) for kind in unsupported),
-        cross_source_evidence_ids=(INVENTORY_ID, CROSS_SOURCE_ID, revision_id, MATERIALIZATION_ID),
+        cross_source_evidence_ids=(INVENTORY_ID, CROSS_SOURCE_ID, revision_id, materialization_id),
         exception_ids=(), quarantine_ids=quarantine_ids,
         publication_rule="imp_ann_date independently checked; date-only becomes next approved session 16:30 Asia/Shanghai",
         economic_effect_rule="ex_date separate from availability; acquisition time forbidden",
@@ -97,7 +97,9 @@ def main() -> int:
         complete=True,
     )
     _write_immutable(RUNTIME / f"pit-evidence-{evidence.evidence_id}.json", asdict(evidence))
-    print(f"PIT_EVIDENCE_ID={evidence.evidence_id} REVISION_AUDIT_ID={revision_id} BASELINE_PIT=PASS CROSS_SOURCE=PASS REVISION=PASS 2026_CATCH_UP=PENDING")
+    (RUNTIME / "current-pit-evidence-id.txt").write_text(evidence.evidence_id, encoding="ascii")
+    (RUNTIME / "current-revision-audit-id.txt").write_text(revision_id, encoding="ascii")
+    print(f"PIT_EVIDENCE_ID={evidence.evidence_id} REVISION_AUDIT_ID={revision_id} BASELINE_PIT=PASS CROSS_SOURCE=PASS REVISION=PASS 2026_CATCH_UP={materialization['catch_up_2026_status']}")
     return 0
 
 

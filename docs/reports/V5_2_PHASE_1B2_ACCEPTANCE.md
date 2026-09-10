@@ -1591,3 +1591,73 @@ dependency group. The final clean-room run above includes that declaration.
 The formal evaluator also recomputes the content identity of the pinned
 cross-source, revision and materialization artifacts; a regression test proves
 that a payload changed under an unchanged claimed ID fails integrity.
+
+## Phase 1B Upstream 2026 Catch-up and Phase 1B-2C Final Closure (2026-09-10)
+
+Starting HEAD: `91883d4473be926fdaa8b9f80bd3948e6c071726`.
+
+### Upstream extension
+
+- Old calendar approval: `1581b4d367dba1256247ddd13e09b53d0f95b5b1deeb40af9e6ed4a36606353b`.
+- New calendar approval: `4a900c7e4f2b171d7adac07088025ca4bb9fb0da13cfa1b15e91eff3dafea601`; manifest: `9653175fa933cd83c975d0a3aff1c3583a75e38c7e906d0c458107911e338385`; approved through `2026-09-11`.
+- Old master approval: `f208c17accba6b669359f476b2fdf3a1bc9ec6856e7fa1831ccdd1c42b80d8cf` and old universe `2456669d1158c8efec6e3204082ce67ca87646236120316307822f9e0f19ad01` remain immutable.
+- New master approval: `828e0e722d3d66c84a48584aac14fde37f86cf471f3722f403ec19044f36345c`; manifest: `3c53b5a99c54c6f1520d31af6c434170011544c19d310ea2e50115dc5f42c940`; effective-dated universe: `016d9b64bb0cda79583a06eb2cc1c89c7b8668e3d63a354b44a159668dd8975f`; approved through `2026-09-10`.
+- Incremental raw acquisition: calendar 508 rows; security master snapshot 5,552 rows. Effective changes after 2025-12-31: 55 listings, 19 delistings, 0 observed code/exchange transitions.
+- Calendar evidence checked SSE/SZSE holiday and reopening boundaries for New Year, Spring Festival, Qingming, Labour Day and Dragon Boat, plus ordinary sessions through 2026-09-11. No weekday inference is permitted.
+- Security-master bounded official sample: 5/5 MATCH (SSE/SZSE listings and one SSE delisting). Missing or ambiguous identities remain fail closed.
+
+### Phase 1B-2C closure
+
+- Existing 262,935 provider rows were reused; no full-history refetch occurred.
+- 3,365 events formerly quarantined only for missing 2026 calendar/universe were reprocessed.
+- Candidate/approved facts: 39,407. Remaining quarantines: 7,899 = 7,894 unsupported share conversions + 2 conflicting implemented economics + 1 incomplete implementation identity + 2 outside the effective 2026 target universe.
+- Corporate Action approval: `5e53080fd85dba5328cda9ed44c5dc5959e5bea965d8f5df12e07201deb8e974`.
+- Approved fact bundle: `3e4a5604e555c036effe66fa5297cffcf374aa34dbd9a8b14eab873c165b6410`.
+- Dataset manifest: `5086896d0066baa928fe44c3469b2c1362feb2068db04acb7336b38c13bdbe2c`.
+- Supported scope: `CASH_DIVIDEND`, `BONUS_SHARE`. Unsupported scope remains machine-visible and fail closed: `RIGHTS_ISSUE`, `STOCK_SPLIT`, `SHARE_CONVERSION`.
+
+Gate results:
+
+```text
+CORPORATE ACTION STRUCTURAL = PASS
+CORPORATE ACTION PIT = PASS
+CORPORATE ACTION CROSS_SOURCE = PASS
+CORPORATE ACTION REVISION = PASS
+ADJUSTMENT SEMANTICS = PASS
+ROLLING COVERAGE MODEL = PASS
+2026 CATCH-UP = PASS
+PRODUCTION INCREMENTAL READINESS = PASS
+EXCEPTION BUDGET = PASS
+SYSTEMATIC DEFECT = PASS
+SOURCE APPROVAL = APPROVED_WITH_RULES
+PUBLICATION_ALLOWED = true
+PHASE 1B-2C = PASS
+```
+
+### Verification commands and results
+
+```text
+.\.venv\Scripts\python.exe -m pytest -q tests/real_audits/test_upstream_2026_extension.py tests/real_audits/test_corporate_action_availability.py tests/real_audits/test_corporate_action_gate_integration.py tests/data/test_manifests.py
+28 passed in 0.07s
+
+.\.venv\Scripts\python.exe -m pytest -q
+391 passed in 15.57s
+
+.\.venv\Scripts\python.exe scripts/verify_standalone.py
+forbidden imports=0; forbidden active paths/dependencies=0; prohibited repository inventory=0; phase 1a architecture boundary violations=0
+
+.\.venv\Scripts\python.exe -m build
+Successfully built stock_screener_v5_2-5.2.0.tar.gz and stock_screener_v5_2-5.2.0-py3-none-any.whl
+
+.\.venv\Scripts\python.exe scripts/clean_room_acceptance.py
+clean_room_dependencies=true; clean_room_install=true; clean_room_tests=true; build=true; wheel_install=true; wheel_smoke=true; old_pythonpath_removed=true; zero_dependency_acceptance=true
+clean-room test output: 391 passed in 196.87s (0:03:16)
+
+credential sentinel scan over tracked files
+CREDENTIAL_SENTINEL_FINDINGS=0; .env ignored and untracked
+
+git diff --check
+exit 0
+```
+
+Known limitations: the approval is action-type scoped; unsupported action types and the three non-conversion semantic defects remain quarantined. This run does not acquire 2026 daily bars, implement a scheduler, or enter Phase 1B-2D.
