@@ -12,7 +12,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from v5_2.data.corporate_action_facts import ActionType  # noqa: E402
 from v5_2.data.identity import canonical_json  # noqa: E402
 from v5_2.data.real_audits.corporate_action_evidence import CorporateActionPITEvidenceV1  # noqa: E402
-from v5_2.data.real_audits.corporate_action_validation import evaluate_corporate_action_gates  # noqa: E402
+from v5_2.data.real_audits.corporate_action_validation import evaluate_corporate_action_gates, gate_artifact_id  # noqa: E402
 
 
 RUNTIME = ROOT / "data" / "phase_1b2c" / "governance"
@@ -48,7 +48,10 @@ def main() -> int:
         evidence, cross_source="PENDING", revision="PENDING", adjustment="PASS",
         catch_up="PENDING", incremental="PASS", exception_budget="PASS", systematic_defect="PASS")
     _write(RUNTIME / f"pit-evidence-{evidence.evidence_id}.json", asdict(evidence))
-    _write(RUNTIME / "latest-gate.json", {"evidence_id": evidence.evidence_id, **asdict(gate)})
+    gate_body = {"evidence_id": evidence.evidence_id, **asdict(gate)}
+    gate_id = gate_artifact_id(gate, evidence.evidence_id)
+    _write(RUNTIME / f"gate-{gate_id}.json", gate_body)
+    (RUNTIME / "current-gate-id.txt").write_text(gate_id, encoding="ascii")
     print(f"CORPORATE_ACTION_STRUCTURAL={gate.structural}")
     print(f"CORPORATE_ACTION_PIT={gate.pit}")
     print(f"CORPORATE_ACTION_CROSS_SOURCE={gate.cross_source}")

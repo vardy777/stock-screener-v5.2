@@ -1276,3 +1276,116 @@ CREDENTIAL_SCAN_FINDINGS=0; .env ignored
 git diff --check
 PASS (line-ending notices only; no whitespace errors)
 ```
+
+## Phase 1B-2C scoped provider-first implementation — 2026-09-10
+
+Starting HEAD: `88164aaed725276213603523ed316db4a4a41993`.
+
+The approved minimum design was implemented without entering Phase 1B-2D. The
+formal target remains `2010-01-04 .. 2025-12-31`, with a separate 2026 catch-up
+and rolling coverage end. The implementation adds immutable corporate-action
+facts, historical and contemporaneous PIT availability rules, a deterministic
+provider inventory and acquisition boundary, dividend normalization, scoped PIT
+evidence, a fail-closed repository, causal adjustment inputs, manifest scope
+lineage, and an artifact-driven gate/publisher boundary.
+
+### Bounded real provider capability audit
+
+The DataHub endpoint probe ran once using the local ignored credential boundary.
+No credential or provider error body was printed or persisted in governance
+results. Actual results were:
+
+```text
+dividend     = SUPPORTED; fields=ts_code,end_date,ann_date,div_proc,stk_div,stk_bo_rate,stk_co_rate,cash_div,cash_div_tax,record_date,ex_date,pay_date,div_listdate,imp_ann_date
+rights       = UNSUPPORTED
+rights_issue = UNSUPPORTED
+adj_factor   = AUDIT_ONLY; fields=ts_code,trade_date,adj_factor
+share_float  = UNSUPPORTED; returned schema is not sufficient corporate-action truth
+```
+
+Only `corporate_action -> dividend` was added to the production provider
+allowlist. `adj_factor` is explicitly excluded from research truth. A bounded
+per-security diagnostic additionally observed real dividend histories spanning
+2000-2026 for `600000.SH`, 1991-2026 for `000001.SZ`, 2018-2026 for
+`300750.SZ`, and 2020-2026 for `688981.SH`; this diagnostic establishes endpoint
+reach only and is not independent validation, a frozen acceptance sample, or
+approved coverage.
+
+### Current honest coverage and gate result
+
+No frozen independent SSE/SZSE/CNINFO sample ledger, revision/cancellation audit,
+or full baseline/catch-up materialization has yet been completed. Therefore no
+interval is represented as validated/materialized and no approval was issued.
+Unsupported types are machine-visible and repository requests outside proven
+type/interval coverage raise `NOT_RESEARCH_SAFE` rather than returning `[]`.
+
+```text
+target_history_start = 2010-01-04
+baseline_validation_end = 2025-12-31
+rolling_coverage_end = 2026-09-09 (evaluation boundary, not approved coverage)
+validated_coverage_by_action_type = none
+materialized_coverage_by_action_type = none
+coverage_gap = 2010-01-04 .. 2026-09-09
+unsupported_action_types = RIGHTS_ISSUE, STOCK_SPLIT, SHARE_CONVERSION
+
+CORPORATE ACTION STRUCTURAL = PASS
+CORPORATE ACTION PIT = PENDING
+CORPORATE ACTION CROSS_SOURCE = PENDING
+CORPORATE ACTION REVISION = PENDING
+ADJUSTMENT SEMANTICS = PASS
+ROLLING COVERAGE MODEL = PASS
+2026 CATCH-UP = PENDING
+PRODUCTION INCREMENTAL READINESS = PASS
+EXCEPTION BUDGET = PASS
+SYSTEMATIC DEFECT = PASS
+SOURCE APPROVAL = PENDING
+PUBLICATION_ALLOWED = false
+APPROVED_FACTS = 0
+DATASET_MANIFEST = none
+```
+
+The publisher consumes the verified gate/approval boundary and correctly emits
+zero facts/no manifest for this pending result. It does not infer approval from
+the provider probe.
+
+### Verification commands and exact results
+
+```text
+.\.venv\Scripts\python.exe -m pytest -q
+370 passed in 10.95s
+
+.\.venv\Scripts\python.exe scripts\verify_standalone.py
+PASS forbidden imports: 0
+PASS forbidden active paths/dependencies: 0
+PASS prohibited repository inventory: 0
+PASS phase 1a architecture boundary violations: 0
+
+.\.venv\Scripts\python.exe -m build
+Successfully built stock_screener_v5_2-5.2.0.tar.gz and stock_screener_v5_2-5.2.0-py3-none-any.whl
+
+.\.venv\Scripts\python.exe scripts\clean_room_acceptance.py
+clean_room_dependencies=true; clean_room_install=true; clean_room_tests=true; build=true; wheel_install=true; wheel_smoke=true; old_pythonpath_removed=true; zero_dependency_acceptance=true
+clean-room test_output: 370 passed in 135.23s (0:02:15)
+
+credential scan over git ls-files using local DATAHUB_API_KEY/TUSHARE_TOKEN values as sentinels
+CREDENTIAL_SCAN_FINDINGS=0; SENTINELS=1; ENV_IGNORED=true
+
+git diff --check
+PASS
+```
+
+The first clean-room run correctly exposed that `ZoneInfo("Asia/Shanghai")`
+depends on an external IANA timezone database on Windows. The implementation and
+tests now use the project-owned fixed UTC+8 timezone already used elsewhere in
+V5.2; the successful clean-room result above is from the post-fix run.
+
+Gate artifacts are content-addressed and immutable; `current-gate-id.txt` is a
+separate runtime pointer. A regression test confirms that changing a disposition
+creates a different gate artifact ID, so replay cannot collide with or rewrite a
+previous result.
+
+Remaining closure work is finite and evidence-bound: freeze the validation sample
+before source comparison, acquire the target universe for the actual supported
+endpoint, validate historical and 2026 coverage, complete independent
+cross-source and revision/cancellation evidence, then rerun the existing gates.
+No threshold or governance relaxation is authorized.

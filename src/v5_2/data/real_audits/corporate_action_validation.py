@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 
+from v5_2.data.identity import content_hash
 from v5_2.data.real_audits.corporate_action_evidence import CorporateActionPITEvidenceV1
 
 
@@ -23,6 +24,10 @@ class CorporateActionGateResultV1:
     systematic_defect: str
     source_approval: str
     publication_allowed: bool
+
+
+def gate_artifact_id(gate: CorporateActionGateResultV1, evidence_id: str) -> str:
+    return content_hash({"schema_version": "CorporateActionGateArtifactV1", "evidence_id": evidence_id, **asdict(gate)})
 
 
 def evaluate_corporate_action_gates(

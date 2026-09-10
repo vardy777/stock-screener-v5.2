@@ -7,6 +7,7 @@ from v5_2.data.real_audits.corporate_action_validation import (
     CorporateActionPublicationError,
     authorize_corporate_action_publication,
     evaluate_corporate_action_gates,
+    gate_artifact_id,
 )
 import pytest
 
@@ -63,3 +64,11 @@ def test_publisher_consumes_verified_gate_and_approval_without_rejudging():
         authorize_corporate_action_publication(pending, "PENDING", evidence())
     with pytest.raises(CorporateActionPublicationError):
         authorize_corporate_action_publication(passing, "APPROVED_WITH_RULES", replace(evidence(), source_version_identity="tampered"))
+
+
+def test_gate_artifact_identity_changes_when_a_gate_disposition_changes():
+    passing = evaluate_corporate_action_gates(
+        evidence(), cross_source="PASS", revision="PASS", adjustment="PASS",
+        catch_up="PASS", incremental="PASS", exception_budget="PASS", systematic_defect="PASS")
+    pending = replace(passing, catch_up_2026="PENDING", source_approval="PENDING", publication_allowed=False)
+    assert gate_artifact_id(passing, evidence().evidence_id) != gate_artifact_id(pending, evidence().evidence_id)

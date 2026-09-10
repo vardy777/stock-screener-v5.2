@@ -5,11 +5,12 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-GATE = ROOT / "data" / "phase_1b2c" / "governance" / "latest-gate.json"
+GOVERNANCE = ROOT / "data" / "phase_1b2c" / "governance"
 
 
 def main() -> int:
-    gate = json.loads(GATE.read_text(encoding="utf-8"))
+    gate_id = (GOVERNANCE / "current-gate-id.txt").read_text(encoding="ascii").strip()
+    gate = json.loads((GOVERNANCE / f"gate-{gate_id}.json").read_text(encoding="utf-8"))
     if not gate.get("publication_allowed") or gate.get("source_approval") != "APPROVED_WITH_RULES":
         print("APPROVED_FACTS=0")
         print("DATASET_MANIFEST=none")
