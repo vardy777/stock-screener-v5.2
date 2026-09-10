@@ -15,6 +15,7 @@ DATAHUB_ENDPOINTS = MappingProxyType(
         "trade_calendar": "trade-cal",
         "security_master": "stock-basic",
         "daily_bar": "daily",
+        "corporate_action": "dividend",
         "risk_warning_history": "namechange",
         "suspension_history": "suspend-d",
         "risk_warning_daily": "stock-st",

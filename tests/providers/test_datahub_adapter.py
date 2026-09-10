@@ -30,11 +30,24 @@ def test_datahub_endpoint_registry_is_dataset_scoped() -> None:
         "trade_calendar": "trade-cal",
         "security_master": "stock-basic",
         "daily_bar": "daily",
+        "corporate_action": "dividend",
         "risk_warning_history": "namechange",
         "suspension_history": "suspend-d",
         "risk_warning_daily": "stock-st",
         "risk_warning_events": "st",
     }
+
+
+def test_verified_dividend_endpoint_is_allowlisted_for_corporate_actions() -> None:
+    provider_request = request("corporate_action", "dividend")
+    response = {
+        "code": 0,
+        "data": {"fields": ["ts_code"], "items": [["600000.SH"]], "has_more": False, "count": 1},
+    }
+    page = DataHubClient(transport=lambda *_: response).fetch_page(
+        provider_request, credential(), page_identity={"offset": 0}
+    )
+    assert page.rows == ({"ts_code": "600000.SH"},)
 
 
 def test_fields_and_items_are_deterministically_mapped_to_rows() -> None:
