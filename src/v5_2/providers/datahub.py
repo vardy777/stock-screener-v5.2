@@ -20,6 +20,9 @@ DATAHUB_ENDPOINTS = MappingProxyType(
         "suspension_history": "suspend-d",
         "risk_warning_daily": "stock-st",
         "risk_warning_events": "st",
+        "financial_income": "income",
+        "financial_balance_sheet": "balancesheet",
+        "financial_cash_flow": "cashflow",
     }
 )
 

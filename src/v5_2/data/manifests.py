@@ -58,6 +58,11 @@ class DatasetManifestV1:
     coverage_gaps: tuple[tuple[date, date, str], ...]
     unsupported_intervals: tuple[tuple[str, date, date], ...]
     latest_approved_session: date | None
+    supported_statement_types: tuple[str, ...]
+    unsupported_financial_endpoints: tuple[str, ...]
+    validated_coverage_by_statement_type: tuple[tuple[str, date, date], ...]
+    materialized_coverage_by_statement_type: tuple[tuple[str, date, date], ...]
+    latest_approved_publication_date: date | None
     manifest_hash: str
 
     @classmethod
@@ -106,6 +111,11 @@ class DatasetManifestV1:
         coverage_gaps: tuple[tuple[date, date, str], ...] = (),
         unsupported_intervals: tuple[tuple[str, date, date], ...] = (),
         latest_approved_session: date | None = None,
+        supported_statement_types: tuple[str, ...] = (),
+        unsupported_financial_endpoints: tuple[str, ...] = (),
+        validated_coverage_by_statement_type: tuple[tuple[str, date, date], ...] = (),
+        materialized_coverage_by_statement_type: tuple[tuple[str, date, date], ...] = (),
+        latest_approved_publication_date: date | None = None,
     ) -> DatasetManifestV1:
         approving = {ApprovalDecision.APPROVED, ApprovalDecision.APPROVED_WITH_RULES}
         if approval.decision not in approving:
@@ -162,6 +172,15 @@ class DatasetManifestV1:
             or not availability_evidence_id
         ):
             raise ManifestError("corporate action manifest requires scoped coverage lineage")
+        if source_name == "datahubco_tushare_proxy" and dataset_kind == "financial_disclosure" and (
+            not supported_statement_types or not unsupported_financial_endpoints
+            or not validated_coverage_by_statement_type
+            or not materialized_coverage_by_statement_type
+            or latest_approved_publication_date is None
+            or not cross_source_evidence_id or not availability_evidence_id
+            or len(upstream_approval_ids) != 2 or not request_inventory_id
+        ):
+            raise ManifestError("financial disclosure manifest requires scoped coverage lineage")
         for name, value in (
             ("created_at", created_at),
             ("approval_resolution_as_of", approval_resolution_as_of),
@@ -214,6 +233,11 @@ class DatasetManifestV1:
             "coverage_gaps": tuple(sorted(coverage_gaps)),
             "unsupported_intervals": tuple(sorted(unsupported_intervals)),
             "latest_approved_session": latest_approved_session,
+            "supported_statement_types": tuple(sorted(set(supported_statement_types))),
+            "unsupported_financial_endpoints": tuple(sorted(set(unsupported_financial_endpoints))),
+            "validated_coverage_by_statement_type": tuple(sorted(validated_coverage_by_statement_type)),
+            "materialized_coverage_by_statement_type": tuple(sorted(materialized_coverage_by_statement_type)),
+            "latest_approved_publication_date": latest_approved_publication_date,
         }
         digest = content_hash(body)
         values = dict(body)

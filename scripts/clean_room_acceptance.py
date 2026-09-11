@@ -55,10 +55,16 @@ def main() -> int:
     results: dict[str, object] = {"python": sys.version.split()[0]}
     with tempfile.TemporaryDirectory(prefix="v52-clean-room-") as temporary:
         room = Path(temporary) / "source"
+        common_ignore = shutil.ignore_patterns(".git", ".venv", ".pytest_cache", "__pycache__", "build", "dist", "*.egg-info")
+        def clean_room_ignore(path: str, names: list[str]) -> set[str]:
+            ignored = set(common_ignore(path, names))
+            if Path(path).resolve() == source.resolve() and "data" in names:
+                ignored.add("data")
+            return ignored
         shutil.copytree(
             source,
             room,
-            ignore=shutil.ignore_patterns(".git", ".venv", ".pytest_cache", "__pycache__", "build", "dist", "*.egg-info"),
+            ignore=clean_room_ignore,
         )
         venv = Path(temporary) / "test-venv"
         subprocess.run([sys.executable, "-m", "venv", str(venv)], check=True, env=env)

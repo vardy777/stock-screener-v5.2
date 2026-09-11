@@ -1661,3 +1661,192 @@ exit 0
 ```
 
 Known limitations: the approval is action-type scoped; unsupported action types and the three non-conversion semantic defects remain quarantined. This run does not acquire 2026 daily bars, implement a scheduler, or enter Phase 1B-2D.
+
+## Phase 1B-2D Financial Disclosures (2026-09-11)
+
+Starting HEAD: `f12f954a77f8e51bf8244a8db92605d36f9482e0`.
+
+### Provider capability and approved scope
+
+The bounded DataHub probe called all six candidate endpoints without placing a
+credential in a URL, log, exception, artifact, or manifest.
+
+```text
+endpoint capability audit = f3ebeac1041826962904c1980e3b311dcb8e176d8c50546fe8b82c309b32eba1
+income = SUPPORTED / PRIMARY FACT CANDIDATE / 3 probe rows
+balancesheet = SUPPORTED / PRIMARY FACT CANDIDATE / 3 probe rows
+cashflow = SUPPORTED / PRIMARY FACT CANDIDATE / 3 probe rows
+fina_indicator = SUPPORTED / DERIVED / OUT OF APPROVED FACT SCOPE / 3 probe rows
+forecast = CALLABLE / DISTINCT KNOWLEDGE SEMANTICS / OUT OF SCOPE / 0 probe rows
+express = SUPPORTED / DISTINCT KNOWLEDGE SEMANTICS / OUT OF SCOPE / 3 probe rows
+```
+
+The formal allowlist contains only `financial_income`,
+`financial_balance_sheet`, and `financial_cash_flow`. The approved metric scope
+is `revenue`, `n_income_attr_p`, `total_assets`, `total_liab`,
+`n_cashflow_act`, and `n_cashflow_inv_act`. Balance-sheet values are explicitly
+`POINT_IN_TIME`; income and cash-flow values are `PERIOD_CUMULATIVE`. No TTM,
+single-quarter conversion, factor, label, ranking, ML, or backtest was added.
+
+`FinancialDisclosureFactV1` keeps `period_end`, `published_at`, `available_at`,
+value/unit/currency, statement/report type, provider version, revision marker,
+supersession identity, and content hash separate. Date-only disclosures use the
+next approved trading session at 16:30 UTC+8; acquisition time never becomes
+historical availability. The repository resolves the latest version whose own
+`available_at <= cutoff` and fails closed on missing approval, manifest,
+coverage, quarantine, or integrity.
+
+### Frozen cross-source evidence
+
+The 14-sample inventory was frozen before any independent value lookup. It
+covers SSE/SZSE, Q1/H1/Q3/annual, early/middle/recent history, 2026 catch-up,
+and all six approved metrics.
+
+```text
+frozen sample inventory = 592c078b5ed4839519fcc78d165ab52b965e78321fe4dd4b4a591ea1f4b9e1bc
+initial wrong-host fail-closed evidence = 12cf1557bf3831859756f252b0524d57410293933a5b7a36e354539a6f2f29e7
+intermediate semantic evidence = 4d162dda966ff31e7010793e86c8edcfbbec8bb48d35434be1b4ef08bc2f3915
+final CNINFO evidence = cd7daf24f838e440ac9c30cf168fadd9db9e7c2b42082ae65e165b2886deb29a
+MATCH = 14
+MISMATCH = 0
+UNAVAILABLE = 0
+UNRESOLVED = 0
+```
+
+Each final ledger entry pins the provider row/payload, CNINFO announcement,
+downloaded PDF SHA-256, metric/value page, identity check, and CNY scaling. The
+validator requires label and numeric value on the same extracted table line;
+four encoding-defective PDF pages use explicit manually inspected anchors that
+pin sample hash, document hash, page, metric, value, and scale. One annual report
+stated values in thousand CNY and matched only after an explicit `x1000`
+conversion. Failed earlier evidence remains immutable and is not reinterpreted.
+
+### Historical acquisition, revision, and materialization
+
+The inventory pins the approved 5,548-security effective-dated historical
+universe, calendar/master approval IDs, three statement types, two bounded date
+segments, and the 2010-01-04 through 2026-09-10 request boundary.
+
+```text
+historical inventory = 0024667537012bc0fcda857193c5308f9a2268ceeb219cc55d7d8988a25b9b00
+acquisition summary = c3d3e90f0158dab8e73f846631c70b683af97f6c862047bc880551b58168de02
+requests = 33,288 / 33,288
+pages = 33,288
+raw rows = 1,094,194
+materialization/revision audit = efcdebc07faa4d5d6a9c01386ac971df32def6ce84e3d1edded8ab1b0564db70
+staging facts = 1,645,022
+later-publication revision groups = 7,695
+same-publication conflict groups = 37
+cross-payload equivalent duplicate groups = 6
+cross-payload revision groups = 0
+cross-payload conflict groups = 0
+quarantines = 4,170
+exception ratio = 0.252851% (frozen maximum = 0.5%)
+```
+
+Quarantines comprise 36 normalized conflicting-version identities, 809 invalid
+report/publication identities, and 3,325 missing metric values. No conflict was
+resolved by choosing an arbitrary row, and no missing value became zero. The
+small explicit exception set is isolated from the approved fact partitions;
+all repository queries touching missing or quarantined facts remain
+`NOT_RESEARCH_SAFE`.
+
+Actual provider fact coverage observed by statement (not panel completeness):
+
+```text
+BALANCE_SHEET period 2001-12-31 .. 2026-06-30; publication 2010-01-04 .. 2026-08-31
+CASH_FLOW    period 2004-12-31 .. 2026-06-30; publication 2009-04-24 .. 2026-09-01
+INCOME       period 1996-12-31 .. 2026-06-30; publication 2009-08-21 .. 2026-09-01
+request scope = 2010-01-04 .. 2026-09-10
+publication scope = OBSERVED_FACTS_ONLY
+historical panel completeness = PARTIAL / NOT ESTABLISHED
+latest approved publication = 2026-09-01
+```
+
+Earlier-period facts are retained only when their disclosures become known
+inside the research window. The 2026 catch-up is bounded by the already-approved
+calendar through 2026-09-11 and universe through 2026-09-10. The request matrix
+contains all 5,548 historical identities, including later-delisted securities;
+zero-row or missing queries are not treated as verified zero/no disclosure.
+The manifest records the full interval as a panel-completeness gap, and the
+repository returns `NOT_RESEARCH_SAFE` for every absent fact.
+
+### Approval, publication, and deterministic replay
+
+```text
+PIT/gate evidence = c548db90095d3418b25a8a5da472fc5e17e6b374cdcb1bc010e4a04cd9dcdf5d
+gate = f1dfa36f194e545332569642eb4bf1dd68980ed4e31a0a831564e46c73dc36b8
+approval = 58afcda2811226574060a352351eb00fc09b066a43c512c1843a8821f69f0498
+approved fact bundle = 2ff7a3c0d2404bb4f4bec8264439929e0687f49e7c77aa925d55684e2d087d0a
+approved facts = 1,645,022
+DatasetManifest = 0b5e72283c045c485eff9ecd2161f019980bdea7ccb33fbcdbdf137d1e13706f
+receipt hashes pinned and integrity-verified = 33,288
+```
+
+Approved facts are deterministically partitioned into balance-sheet, cash-flow,
+and income gzip JSONL artifacts. Gzip timestamps are fixed. A complete second
+publication run reproduced the same gate, approval, fact bundle, partition, and
+manifest identities. The publisher consumes the verified frozen gate/evidence;
+it does not implement a second approval policy.
+
+Final gates:
+
+```text
+FINANCIAL DISCLOSURE STRUCTURAL = PASS
+FINANCIAL DISCLOSURE PIT = PASS
+FINANCIAL DISCLOSURE CROSS_SOURCE = PASS
+FINANCIAL DISCLOSURE REVISION = PASS
+FINANCIAL DISCLOSURE VALUE_SEMANTICS = PASS
+FINANCIAL DISCLOSURE UNIT_SEMANTICS = PASS
+HISTORICAL COVERAGE = PARTIAL (OBSERVED_FACTS_ONLY; missing rows fail closed)
+2026 CATCH_UP = PASS
+SURVIVORSHIP = PASS
+ROLLING COVERAGE MODEL = PASS
+PRODUCTION INCREMENTAL READINESS = PASS
+EXCEPTION BUDGET = PASS
+SYSTEMATIC DEFECT = PASS
+SOURCE APPROVAL = APPROVED_WITH_RULES
+PUBLICATION_ALLOWED = true
+APPROVED_FACTS = 1,645,022
+DATASET_MANIFEST = 0b5e72283c045c485eff9ecd2161f019980bdea7ccb33fbcdbdf137d1e13706f
+PHASE 1B-2D = PASS
+```
+
+### Verification commands and results
+
+```text
+.\.venv\Scripts\python.exe -m pytest -q tests/providers/test_datahub_adapter.py tests/data/test_financial_disclosures.py tests/real_audits/test_financial_disclosure_entry.py tests/real_audits/test_financial_disclosure_normalization.py tests/real_audits/test_financial_disclosure_gates.py tests/data/test_manifests.py
+48 passed in 0.10s
+
+.\.venv\Scripts\python.exe -m pytest -q
+419 passed in 314.79s (0:05:14)
+
+.\.venv\Scripts\python.exe scripts\verify_standalone.py
+forbidden imports=0; forbidden active paths/dependencies=0; prohibited repository inventory=0; phase 1a architecture boundary violations=0
+
+.\.venv\Scripts\python.exe -m build
+Successfully built stock_screener_v5_2-5.2.0.tar.gz and stock_screener_v5_2-5.2.0-py3-none-any.whl
+
+.\.venv\Scripts\python.exe scripts\clean_room_acceptance.py
+clean_room_dependencies=true; clean_room_install=true; clean_room_tests=true; build=true; wheel_install=true; wheel_smoke=true; old_pythonpath_removed=true; zero_dependency_acceptance=true
+clean-room test output: 419 passed in 2.07s
+archive findings: none
+
+known-secret sentinel scan across tracked and candidate source files
+KNOWN_SECRET_FINDINGS=0; GENERIC_LITERAL_SECRET_FINDINGS=0; ENV_IGNORED=true; ENV_TRACKED=false
+
+git diff --check
+PASS (no whitespace errors)
+```
+
+The clean-room copier now excludes only the repository-root ignored runtime
+`data/` directory; it retains `src/v5_2/data`. This prevents local raw caches
+from contaminating standalone verification while preserving the complete
+installed data package.
+
+Known limitations: approval is statement/metric and observed-fact scoped;
+provider-derived indicators, forecasts, and express reports remain unsupported
+for formal facts. Historical panel completeness is not established, and the
+manifest makes that full-interval gap machine-visible. Quarantined identities
+and absent disclosures remain fail closed. No scheduler,
+feature, label, ranking, ML, backtest, Phase 1B Exit, or Phase 2 work was started.
