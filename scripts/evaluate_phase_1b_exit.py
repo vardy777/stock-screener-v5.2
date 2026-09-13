@@ -20,27 +20,27 @@ from v5_2.data.phase_1b_exit import (
 PINNED_DATASETS = {
     "trade_calendar": {
         "approval_id": "4a900c7e4f2b171d7adac07088025ca4bb9fb0da13cfa1b15e91eff3dafea601",
-        "manifest_id": "9653175fa933cd83c975d0a3aff1c3583a75e38c7e906d0c458107911e338385",
+        "manifest_id": "5f5ba7d0594f5f1e2d40ad43b54a93a303a7d25af8e1104e6c633463076e6486",
         "approval": "data/phase_1b1_2026_extension/governance/trade_calendar-approval-{approval_id}.json",
-        "manifest": "data/phase_1b1_2026_extension/governance/trade_calendar-manifest-{manifest_id}.json",
+        "manifest": "data/phase_1b_exit_remediation/governance/trade-calendar-complete-manifest-{manifest_id}.json",
     },
     "security_master": {
         "approval_id": "828e0e722d3d66c84a48584aac14fde37f86cf471f3722f403ec19044f36345c",
-        "manifest_id": "3c53b5a99c54c6f1520d31af6c434170011544c19d310ea2e50115dc5f42c940",
+        "manifest_id": "025982975b942c416945d9580f2a8272d667f7676e9f6fa213429e3da2ee382b",
         "approval": "data/phase_1b1_2026_extension/governance/security_master-approval-{approval_id}.json",
-        "manifest": "data/phase_1b1_2026_extension/governance/security_master-manifest-{manifest_id}.json",
+        "manifest": "data/phase_1b_exit_remediation/governance/security-master-complete-manifest-{manifest_id}.json",
     },
     "daily_bar": {
-        "approval_id": "7daf8a38391ebb27ef5675cce6e978b1b10823195b304eca84d719c3d5504724",
-        "manifest_id": "9f38b28b3b2a4f93a16fe80144a1b894fdbabc1afea0e9dbe58009d3bce051e4",
-        "approval": "data/phase_1b2b/governance/daily-bar-approval-{approval_id}.json",
-        "manifest": "data/phase_1b2b/governance/daily-bar-manifest-{manifest_id}.json",
+        "approval_id": "fc26bf140708a72957f687757665508ee439cb079b9bdaff86686109b7683ea5",
+        "manifest_id": "76c4fe58d0714405d0a6a826bf9b814237d812f88f69b63986a0e0317f924b4b",
+        "approval": "data/phase_1b_exit_remediation/governance/daily_bar-approval-{approval_id}.json",
+        "manifest": "data/phase_1b_exit_remediation/governance/daily_bar-manifest-{manifest_id}.json",
     },
     "daily_security_status": {
-        "approval_id": "60d31609f590cf08f54ff682d5c4de5a987cdb670b13fe33eeb2466389d39edc",
-        "manifest_id": "57b4d38523c32a31959fb8dc9e2335778f97ed86562413c95e7ff9716ec65e3d",
-        "approval": "data/phase_1b2a/governance/daily_security_status-approval-{approval_id}.json",
-        "manifest": "data/phase_1b2a/governance/daily_security_status-manifest-{manifest_id}.json",
+        "approval_id": "ac1c23dae38c32228bfc6639714976e6a01063b230ae3397ee45d9ac1d8afa07",
+        "manifest_id": "d96fc4f26c459dc000ca8059a8364a8236e906305be83d2d72adc01d9e11ffb0",
+        "approval": "data/phase_1b_exit_remediation/governance/daily_security_status-approval-{approval_id}.json",
+        "manifest": "data/phase_1b_exit_remediation/governance/daily_security_status-manifest-{manifest_id}.json",
     },
     "corporate_action": {
         "approval_id": "5e53080fd85dba5328cda9ed44c5dc5959e5bea965d8f5df12e07201deb8e974",
@@ -62,6 +62,23 @@ FROZEN_SESSIONS = (
     ("RECENT", date(2025, 6, 30)),
     ("2026", date(2026, 6, 30)),
 )
+
+DAILY_FROZEN_AVAILABILITY_ID = "70ee31d3e126d12baf6d08a4b780d8051d3477762521f1fe34780319c9ccadbd"
+STATUS_FROZEN_RESOLUTION_ID = "3ae79a145d7d0252aea1d5e35fb6b737fba568603cc5e2a9a499e22fdf68fd44"
+
+OLD_REPORTED_MAPPING = {
+    "EARLY": "bfd09d04cedec1232c2ad16a8de4f4730029af279e0f15d3d2ce7f61fb5848bd",
+    "MIDDLE": "b223802c15de6901459bd07b8bb7f1216a75746277658af76542bf9ad22ce1b3",
+    "RECENT": "222594638c5e82f44ac25adf76c76dbfc596dae38573863fa2318e383ed14256",
+    "2026": "1c07e67549a33a4d651b64f75c780f1ab7770b96a2a7ae7c963159ec273f3e0b",
+}
+
+FROZEN_ORIGINAL_MAPPING = {
+    "EARLY": "bfd09d04cedec1232c2ad16a8de4f4730029af279e0f15d3d2ce7f61fb5848bd",
+    "MIDDLE": "222594638c5e82f44ac25adf76c76dbfc596dae38573863fa2318e383ed14256",
+    "RECENT": "1c07e67549a33a4d651b64f75c780f1ab7770b96a2a7ae7c963159ec273f3e0b",
+    "2026": "b223802c15de6901459bd07b8bb7f1216a75746277658af76542bf9ad22ce1b3",
+}
 
 
 def _load(path: Path) -> dict[str, Any]:
@@ -121,16 +138,13 @@ def build_coverage_matrix(lineage: Mapping[str, Mapping[str, Any]]) -> Phase1BCo
             gaps.append("MANIFEST_INTEGRITY_INVALID")
         mode, approved, unsupported = "MATERIALIZED_PANEL", (), ()
         if dataset == "trade_calendar":
-            mode, approved = "INCREMENTAL_EXTENSION_ONLY", ("OPEN_SESSION",)
-            gaps.append("2010_2025_BASE_MANIFEST_NOT_PINNED")
+            mode, approved = "COMPLETE_APPROVED_LINEAGE", ("OPEN_SESSION",)
         elif dataset == "security_master":
-            mode, approved = "INCREMENTAL_EXTENSION_ONLY", ("TARGET_A_SHARE",)
-            gaps.append("2010_2025_BASE_MANIFEST_NOT_PINNED")
+            mode, approved = "COMPLETE_EFFECTIVE_DATED_LINEAGE", ("TARGET_A_SHARE",)
         elif dataset == "daily_bar":
             approved = ("UNADJUSTED_RAW",)
         elif dataset == "daily_security_status":
-            mode, approved = "ACCEPTANCE_SAMPLE_ONLY", ("LISTING", "RISK_WARNING", "SUSPENSION", "IDENTITY")
-            gaps.append("HISTORICAL_STATUS_PANEL_NOT_MATERIALIZED")
+            mode, approved = "RESEARCH_WIDE_PIT_PANEL", ("LISTING", "RISK_WARNING", "SUSPENSION", "IDENTITY")
         elif dataset == "corporate_action":
             mode = "SCOPED_ACTION_TYPES"
             approved = tuple(rules.get("supported_action_types", manifest.get("supported_action_types", ())))
@@ -157,24 +171,97 @@ def _approved_open_sessions(repo_root: Path) -> set[date]:
     return sessions
 
 
+def historical_universe(repo_root: Path, session: date) -> tuple[str, ...]:
+    """Resolve effective membership from immutable lifecycle fields, never today's snapshot."""
+    bundle = next((repo_root / "data/phase_1b_exit_remediation/governance").glob(
+        "complete-security-master-fact-bundle-*.json"))
+    target = set(_load(bundle)["ordered_security_identities"])
+    lifecycle: dict[str, tuple[str, str]] = {}
+    for root in (repo_root / "data/phase_1b1", repo_root / "data/phase_1b1_2026_extension"):
+        for path in (root / "raw/datahubco_tushare_proxy/security_master").rglob("*.json"):
+            for row in _load(path)["provider_payload"]["rows"]:
+                identity = str(row.get("ts_code", ""))
+                if identity not in target:
+                    continue
+                value = (str(row.get("list_date") or "00000000"),
+                         str(row.get("delist_date") or "99999999"))
+                if identity in lifecycle and lifecycle[identity] != value:
+                    raise ValueError("conflicting effective identity lifecycle")
+                lifecycle[identity] = value
+    if set(lifecycle) != target:
+        raise ValueError("historical universe lifecycle is incomplete")
+    key = session.strftime("%Y%m%d")
+    return tuple(sorted(identity for identity, (start, end) in lifecycle.items()
+                        if start <= key <= end))
+
+
 def _to_jsonable(value: Any) -> Any:
     return json.loads(canonical_json(value).decode("utf-8"))
 
 
+def audit_frozen_dry_run_references(repo_root: Path) -> dict[str, Any]:
+    expected_sessions = {label: session.isoformat() for label, session in FROZEN_SESSIONS}
+    correct: dict[str, str] = {}
+    paths: dict[str, str] = {}
+    root = repo_root / "data/phase_1b_exit/governance"
+    for frozen_hash in FROZEN_ORIGINAL_MAPPING.values():
+        path = root / f"historical-research-session-{frozen_hash}.json"
+        if not path.is_file():
+            raise ValueError("old frozen dry-run artifact is missing")
+        value = _load(path)
+        label, session = value["label"], value["session"]
+        result_hash = value["result"]["session_result_hash"]
+        if expected_sessions.get(label) != session or not path.stem.endswith(result_hash):
+            raise ValueError("old dry-run artifact identity is internally inconsistent")
+        if label in correct:
+            raise ValueError("duplicate old dry-run label")
+        correct[label], paths[label] = result_hash, path.relative_to(repo_root).as_posix()
+    if set(correct) != set(expected_sessions):
+        raise ValueError("old dry-run inventory is incomplete")
+    body = {"schema_version": "DryRunReferenceCorrectionV1",
+        "status": ("REFERENCE_CORRECTION_REQUIRED" if correct != OLD_REPORTED_MAPPING else "REFERENCES_VALID"),
+        "reason": "report label-to-hash references were transposed; immutable artifacts remain unchanged",
+        "old_reported_mapping": OLD_REPORTED_MAPPING, "correct_mapping": correct,
+        "artifact_paths": paths, "sessions": expected_sessions}
+    digest = content_hash(body)
+    return {**body, "artifact_id": digest, "content_hash": digest}
+
+
 def run_exit_evaluation(repo_root: Path, *, repository_head: str, write: bool = True) -> dict[str, Any]:
+    correction = audit_frozen_dry_run_references(repo_root)
     lineage = load_and_verify_lineage(repo_root)
     matrix = build_coverage_matrix(lineage)
     open_sessions = _approved_open_sessions(repo_root)
-    universe = tuple(_load(repo_root / "data/phase_1b1/governance/daily-bar-universe-2456669d1158c8efec6e3204082ce67ca87646236120316307822f9e0f19ad01.json")["ordered_symbols"])
+    daily_availability = _load(repo_root / "data/phase_1b_exit_remediation/governance" /
+        f"daily-bar-frozen-session-availability-{DAILY_FROZEN_AVAILABILITY_ID}.json")
+    status_resolution = _load(repo_root / "data/phase_1b_exit_remediation/governance" /
+        f"status-frozen-session-resolution-{STATUS_FROZEN_RESOLUTION_ID}.json")
+    if not _artifact_valid(daily_availability, schema="DailyBarFrozenSessionAvailabilityV1",
+                           id_names=("artifact_id", "content_hash")):
+        raise ValueError("daily-bar frozen availability artifact is invalid")
+    if not _artifact_valid(status_resolution, schema="StatusFrozenSessionResolutionV1",
+                           id_names=("artifact_id", "content_hash")):
+        raise ValueError("status frozen resolution artifact is invalid")
+    if (daily_availability["panel_id"] not in lineage["daily_bar"]["manifest"]["fact_content_hashes"]
+            or status_resolution["panel_id"] not in lineage["daily_security_status"]["manifest"]["fact_content_hashes"]):
+        raise ValueError("frozen availability does not bind the pinned panel manifest")
     dry_runs = []
     for label, session in FROZEN_SESSIONS:
         cutoff = HistoricalResearchCutoffContractV1.create(session=session,
             cutoff=datetime.combine(session, time(16, 30), SHANGHAI), timezone_name="Asia/Shanghai",
             calendar_approval_id=PINNED_DATASETS["trade_calendar"]["approval_id"],
             approved_open_sessions=open_sessions)
+        session_key = session.strftime("%Y%m%d")
+        universe = historical_universe(repo_root, session)
+        resolved_universe = tuple(status_resolution["sessions"][session_key]["universe"])
+        if resolved_universe != universe:
+            raise ValueError("status resolution universe does not match effective master lifecycle")
         result = HistoricalResearchSessionV1.evaluate(cutoff_contract=cutoff, coverage_matrix=matrix,
             base_universe=universe, lineage_valid=all(item["valid"] for item in lineage.values()),
-            base_availability={})
+            base_availability={"security_master": universe,
+                "daily_bar": tuple(daily_availability["sessions"][session_key]),
+                "daily_security_status": resolved_universe},
+            base_ineligible=dict(status_resolution["sessions"][session_key]["ineligible_reasons"]))
         dry_runs.append({"label": label, "session": session.isoformat(), "cutoff": cutoff.cutoff.isoformat(),
             "cutoff_contract_id": cutoff.contract_id, "result": _to_jsonable(asdict(result))})
     replay_id = content_hash(tuple(item["result"]["session_result_hash"] for item in dry_runs))
@@ -204,17 +291,19 @@ def run_exit_evaluation(repo_root: Path, *, repository_head: str, write: bool = 
         dry_run_ids=tuple(item["result"]["session_result_hash"] for item in dry_runs),
         chaos_test_evidence_id=chaos_id, deterministic_replay_id=replay_id,
         gate_results=tuple(gates.items()), known_limitations=(
-            "daily_bar materialization covers 2024-01-01 through 2025-12-31 only",
-            "daily_security_status manifest is a 71-row acceptance evidence set, not a historical panel",
-            "trade_calendar and security_master current manifests cover only the 2026 extension",
+            f"dry_run_reference_correction_id={correction['artifact_id']}",
+            "daily_bar missing symbol-sessions remain unclassified and security-scoped fail closed",
+            "historical reconstructed daily bars use NEXT_SESSION_SAFE and are not contemporaneous observations",
             "financial disclosure panel completeness is not established",
         ))
     payload = {"coverage_matrix": _to_jsonable(asdict(matrix)), "lineage": _to_jsonable(lineage),
+        "dry_run_reference_correction": correction,
         "dry_runs": dry_runs, "chaos": {**chaos, "evidence_id": chaos_id},
         "acceptance": {**_to_jsonable(asdict(acceptance)), "gate_results": gates}}
     if write:
         output = repo_root / "data/phase_1b_exit/governance"
         output.mkdir(parents=True, exist_ok=True)
+        (output / f"dry-run-reference-correction-{correction['artifact_id']}.json").write_bytes(canonical_json(correction) + b"\n")
         (output / f"phase-1b-coverage-matrix-{matrix.coverage_matrix_id}.json").write_bytes(canonical_json(payload["coverage_matrix"]) + b"\n")
         for item in dry_runs:
             (output / f"historical-research-session-{item['result']['session_result_hash']}.json").write_bytes(canonical_json(item) + b"\n")

@@ -113,16 +113,25 @@ def scan_phase1a_boundaries(root: Path) -> list[str]:
 
 
 def scan_secret_leaks(root: Path, sentinels: tuple[str, ...]) -> list[str]:
-    active_sentinels = tuple(value for value in sentinels if value)
+    active_sentinels = tuple(value.encode("utf-8") for value in sentinels if value)
     if not active_sentinels:
         return []
     findings: list[str] = []
     for path in _files(root, ("data", "logs", "artifacts", "build", "dist")):
         try:
-            content = path.read_bytes()
+            found = False
+            tail = b""
+            overlap = max(len(value) for value in active_sentinels) - 1
+            with path.open("rb") as handle:
+                while chunk := handle.read(1024 * 1024):
+                    content = tail + chunk
+                    if any(value in content for value in active_sentinels):
+                        found = True
+                        break
+                    tail = content[-overlap:] if overlap else b""
         except OSError:
             continue
-        if any(value.encode("utf-8") in content for value in active_sentinels):
+        if found:
             findings.append(f"{path.relative_to(root)}: sentinel secret leak")
     return sorted(findings)
 

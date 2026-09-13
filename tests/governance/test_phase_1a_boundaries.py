@@ -62,5 +62,16 @@ def test_sentinel_scan_detects_secret_in_runtime_artifact(tmp_path: Path) -> Non
     assert findings == ["data\\raw\\page.json: sentinel secret leak"]
 
 
+def test_sentinel_scan_detects_secret_split_across_stream_chunks(tmp_path: Path, monkeypatch) -> None:
+    artifact = tmp_path / "data" / "raw" / "large.bin"
+    artifact.parent.mkdir(parents=True)
+    sentinel = b"V52_BOUNDARY_SECRET"
+    artifact.write_bytes(b"x" * (1024 * 1024 - 5) + sentinel)
+    monkeypatch.setattr(Path, "read_bytes", lambda self: (_ for _ in ()).throw(
+        AssertionError("secret scan must stream large runtime artifacts")))
+    assert verifier.scan_secret_leaks(tmp_path, (sentinel.decode(),)) == [
+        "data\\raw\\large.bin: sentinel secret leak"]
+
+
 def test_current_runtime_areas_have_no_sentinel_leak() -> None:
     assert verifier.scan_secret_leaks(ROOT, ("SENTINEL_TUSHARE_SECRET",)) == []

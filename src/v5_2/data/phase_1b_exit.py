@@ -132,7 +132,8 @@ class HistoricalResearchSessionV1:
                  requires_corporate_action_safe: bool = False,
                  corporate_action_unsafe: Mapping[str, str] | None = None,
                  required_financial_metrics: Sequence[str] = (),
-                 financial_unsafe: Mapping[tuple[str, str], str] | None = None):
+                 financial_unsafe: Mapping[tuple[str, str], str] | None = None,
+                 base_ineligible: Mapping[str, str] | None = None):
         universe = tuple(sorted(set(base_universe)))
         approval_ids = tuple(item.approval_id for item in coverage_matrix.entries)
         manifest_ids = tuple(item.manifest_id for item in coverage_matrix.entries)
@@ -161,6 +162,12 @@ class HistoricalResearchSessionV1:
                     base_eligible.discard(security)
                 else:
                     rows.append((security, dataset, "SAFE", ""))
+        for security, reason in sorted((base_ineligible or {}).items()):
+            if security in universe and security in set(base_availability.get("daily_security_status", ())):
+                rows = [row for row in rows
+                        if not (row[0] == security and row[1] == "daily_security_status")]
+                rows.append((security, "daily_security_status", "NOT_RESEARCH_SAFE", reason))
+                base_eligible.discard(security)
         ca_unsafe = corporate_action_unsafe or {}
         financial_failures = financial_unsafe or {}
         financial_scope = set(coverage_matrix.entry("financial_disclosure").approved_scope)

@@ -129,6 +129,18 @@ def test_unsupported_optional_scopes_are_security_level_fail_closed():
         "CORPORATE_ACTION_UNSUPPORTED": 1, "FINANCIAL_METRIC_UNSUPPORTED": 1}
 
 
+def test_pit_status_value_blocks_security_without_invalidating_session():
+    result = HistoricalResearchSessionV1.evaluate(
+        cutoff_contract=cutoff(), coverage_matrix=matrix(), base_universe=("000001.SZ",),
+        lineage_valid=True, base_availability={"security_master": ("000001.SZ",),
+            "daily_bar": ("000001.SZ",), "daily_security_status": ("000001.SZ",)},
+        base_ineligible={"000001.SZ": "RISK_WARNING"})
+    assert result.session_valid
+    assert result.base_eligible_count == 0
+    assert result.blocked_security_count == 1
+    assert ("000001.SZ", "daily_security_status", "NOT_RESEARCH_SAFE", "RISK_WARNING") in result.security_dataset_eligibility
+
+
 def test_session_result_and_exit_acceptance_replay_deterministically():
     kwargs = dict(cutoff_contract=cutoff(), coverage_matrix=matrix(),
         base_universe=("000002.SZ", "000001.SZ"), lineage_valid=True,
