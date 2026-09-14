@@ -162,3 +162,59 @@ def build_comparison_ledger(calculations: tuple[IndependentLabelCalculationV1, .
         entries.append(ComparisonEntryV1(item.slot, item.calculation_id, disposition, engine, item.result_summary, item.reason))
     digest = content_hash({"schema_version": "EngineComparisonLedgerV1", "entries": tuple(entries)})
     return EngineComparisonLedgerV1(tuple(entries), digest, digest)
+
+
+ACCEPTANCE_GATES = (
+    "LABEL CONTRACT", "CAUSAL ISOLATION", "TRADING SESSION SEMANTICS",
+    "RETURN SEMANTICS", "MFE/MAE SEMANTICS", "BARRIER SEMANTICS",
+    "CORPORATE ACTION SAFETY", "SUSPENSION SAFETY", "DELISTING SAFETY",
+    "IDENTITY SAFETY", "MISSING DATA FAIL-CLOSED", "LABEL_PENDING",
+    "NOT_LABEL_SAFE", "REFERENCE SAMPLES", "INDEPENDENT VERIFICATION",
+    "DETERMINISTIC REPLAY",
+)
+
+
+@dataclass(frozen=True, slots=True)
+class Phase2AAcceptanceArtifactV1:
+    statuses: tuple[tuple[str, str], ...]
+    evidence_ids: tuple[str, ...]
+    phase_2a_status: str
+    ready_for_phase_2b: bool
+    acceptance_id: str
+    content_hash: str
+
+    @classmethod
+    def create(cls, *, statuses: tuple[tuple[str, str], ...], evidence_ids: tuple[str, ...]):
+        if tuple(name for name, _ in statuses) != ACCEPTANCE_GATES: raise ValueError("exact 16 acceptance gates required")
+        if any(value not in {"PASS", "PENDING", "FAIL"} for _, value in statuses): raise ValueError("invalid gate status")
+        ready = all(value == "PASS" for _, value in statuses)
+        state = "PASS" if ready else "FAIL" if any(value == "FAIL" for _, value in statuses) else "PENDING"
+        body = {"statuses": statuses, "evidence_ids": evidence_ids, "phase_2a_status": state, "ready_for_phase_2b": ready}
+        digest = content_hash({"schema_version": cls.__name__, **body})
+        return cls(**body, acceptance_id=digest, content_hash=digest)
+
+    def verify(self):
+        body = {name: getattr(self, name) for name in ("statuses", "evidence_ids", "phase_2a_status", "ready_for_phase_2b")}
+        return self.acceptance_id == self.content_hash == content_hash({"schema_version": type(self).__name__, **body})
+
+
+def render_acceptance_report(inventory: LabelAcceptanceInventoryV1, ledger: EngineComparisonLedgerV1,
+                             acceptance: Phase2AAcceptanceArtifactV1) -> str:
+    if not inventory.verify() or not ledger.verify() or not acceptance.verify(): raise ValueError("tampered acceptance input")
+    comparisons = {item.slot: item for item in ledger.entries}
+    lines = ["# V5.2 Phase 2A Acceptance", "", f"PHASE 2A = {acceptance.phase_2a_status}",
+             f"READY FOR PHASE 2B = {'YES' if acceptance.ready_for_phase_2b else 'NO'}", "",
+             "## 16 gates", ""]
+    lines.extend(f"- {name} = {value}" for name, value in acceptance.statuses)
+    lines.extend(["", "## Frozen 22-slot audit", "",
+        "| slot | stratum | canonical security identity | anchor session | provenance path | inventory status | engine label state | independent label state | reference result summary | independent result summary | comparison result | reason / EVIDENCE_UNAVAILABLE | inventory evidence ID | independent calculation ID | comparison evidence ID |",
+        "|---:|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"])
+    for slot in inventory.slots:
+        comp = comparisons[slot.slot]
+        independent_state = "EVIDENCE_UNAVAILABLE" if comp.disposition == "EVIDENCE_UNAVAILABLE" else "CALCULATED"
+        reason = comp.reason or slot.reason or ""
+        lines.append(f"| {slot.slot:02d} | {slot.stratum} | {slot.security_identity} | {slot.anchor_session.isoformat()} | {slot.provenance_path.value} | {slot.inventory_status} | EVIDENCE_UNAVAILABLE | {independent_state} | EVIDENCE_UNAVAILABLE | {comp.independent_summary or 'EVIDENCE_UNAVAILABLE'} | {comp.disposition} | {reason or 'EVIDENCE_UNAVAILABLE'} | {slot.evidence_ids[0]} | {comp.calculation_id} | {ledger.ledger_id} |")
+    lines.extend(["", "## Immutable evidence", "", f"REAL SAMPLE INVENTORY ID = {inventory.inventory_id}",
+                  f"INDEPENDENT VERIFICATION ID = {ledger.ledger_id}", f"PHASE 2A ACCEPTANCE ID = {acceptance.acceptance_id}", "",
+                  "Raw runtime evidence remains ignored under `data/phase_2a/`; this table preserves the GitHub-auditable disposition of every mandatory slot.", ""])
+    return "\n".join(lines)
