@@ -200,13 +200,25 @@ class LabelInputBundleV1:
     domain_lineage: tuple[DomainLineageV1, ...]
     anchor_snapshot_id: str | None
     outcome_snapshot_id: str | None
-    content_hash: str
+    approved_exchange_sessions: tuple[date, ...]
+    latest_completed_session: date
+    future_bars: tuple[object, ...]
+    future_statuses: tuple[object, ...]
+    corporate_actions: tuple[object, ...]
+    action_coverage: object | None
+    dated_identity_map: tuple[tuple[date, str, str], ...]
+    delisting_session: date | None
+    content_hash: str = ""
 
     @classmethod
     def create(cls, *, canonical_security_identity: str, anchor_session: date,
                anchor_boundary: AnchorKnowledgeBoundary, reference_price: LabelReferencePrice,
                provenance_path: ProvenancePath, domain_lineage: tuple[DomainLineageV1, ...],
-               anchor_snapshot_id: str | None = None, outcome_snapshot_id: str | None = None):
+               anchor_snapshot_id: str | None = None, outcome_snapshot_id: str | None = None,
+               approved_exchange_sessions: tuple[date, ...] = (), latest_completed_session: date | None = None,
+               future_bars: tuple[object, ...] = (), future_statuses: tuple[object, ...] = (),
+               corporate_actions: tuple[object, ...] = (), action_coverage: object | None = None,
+               dated_identity_map: tuple[tuple[date, str, str], ...] = (), delisting_session: date | None = None):
         provenance_path = ProvenancePath(provenance_path)
         if anchor_boundary.anchor_session != anchor_session or reference_price.session != anchor_session: raise ValueError("anchor session mismatch")
         if tuple(item.domain for item in domain_lineage) != REQUIRED_LABEL_DOMAINS: raise ValueError("exact ordered five-domain lineage required")
@@ -217,11 +229,16 @@ class LabelInputBundleV1:
         body = {"canonical_security_identity": canonical_security_identity, "anchor_session": anchor_session,
                 "anchor_boundary": anchor_boundary, "reference_price": reference_price,
                 "provenance_path": provenance_path, "domain_lineage": domain_lineage,
-                "anchor_snapshot_id": anchor_snapshot_id, "outcome_snapshot_id": outcome_snapshot_id}
+                "anchor_snapshot_id": anchor_snapshot_id, "outcome_snapshot_id": outcome_snapshot_id,
+                "approved_exchange_sessions": approved_exchange_sessions,
+                "latest_completed_session": latest_completed_session or anchor_session,
+                "future_bars": future_bars, "future_statuses": future_statuses,
+                "corporate_actions": corporate_actions, "action_coverage": action_coverage,
+                "dated_identity_map": dated_identity_map, "delisting_session": delisting_session}
         return cls(**body, content_hash=_hash_body(cls.__name__, body))
 
     def verify(self) -> bool:
-        body = {name: getattr(self, name) for name in ("canonical_security_identity", "anchor_session", "anchor_boundary", "reference_price", "provenance_path", "domain_lineage", "anchor_snapshot_id", "outcome_snapshot_id")}
+        body = {name: getattr(self, name) for name in ("canonical_security_identity", "anchor_session", "anchor_boundary", "reference_price", "provenance_path", "domain_lineage", "anchor_snapshot_id", "outcome_snapshot_id", "approved_exchange_sessions", "latest_completed_session", "future_bars", "future_statuses", "corporate_actions", "action_coverage", "dated_identity_map", "delisting_session")}
         return self.anchor_boundary.verify() and self.reference_price.verify() and all(x.verify() for x in self.domain_lineage) and self.content_hash == _hash_body(type(self).__name__, body)
 
 
