@@ -1,1 +1,3 @@
-"""V5.2 future labels are deferred until P0 data gates pass."""
+"""Pure, scalar Phase 2A reference-label contracts and engine."""
+
+from .contracts import *  # noqa: F401,F403
