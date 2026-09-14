@@ -72,7 +72,7 @@ is never packaged into the wheel.
 
 **Interfaces:**
 - Consumes: `v5_2.data.identity.canonical_json`, `content_hash`; existing `DailyBarFactV1`, `DailySecurityStatusFactV1`, and `CorporateActionFactV1` only as typed immutable inputs.
-- Produces: `LabelState`, `LabelReasonCode`, `BarrierOutcomeV1`, `ProvenancePath`, `AnchorKnowledgeBoundary`, `LabelReferencePrice`, `LabelContractV1`, `LabelValueV1`, `LabelResultV1`, and `LabelInputBundleV1`.
+- Produces: `LabelState`, `LabelReasonCode`, `BarrierOutcomeV1`, `ProvenancePath`, `AnchorKnowledgeBoundary`, `LabelReferencePrice`, `DomainLineageV1`, `LabelContractV1`, `LabelValueV1`, `LabelResultV1`, and `LabelInputBundleV1`.
 
 - [ ] **Step 1: Write the contract-state RED tests**
 
@@ -137,6 +137,14 @@ test_historical_bundle_is_valid_without_snapshot_ids — HISTORICAL accepts both
 test_contemporaneous_bundle_requires_real_anchor_and_outcome_snapshot_ids — missing either 64-hex ID raises contract error
 test_invalid_provenance_value_is_rejected — unknown enum input raises ValueError
 test_bundle_requires_exact_five_domain_lineage_and_not_financial — omission/addition fails validation
+test_domain_lineage_missing_approval_id_is_rejected — an empty approval role cannot be represented
+test_domain_lineage_missing_manifest_id_is_rejected — an empty manifest role cannot be represented
+test_approval_and_manifest_role_swap_is_rejected — typed artifacts cannot exchange roles despite valid 64-hex IDs
+test_wrong_domain_lineage_is_rejected — artifact dataset_kind must equal the declared label domain
+test_duplicate_fact_id_is_rejected — fact IDs are unique inside one domain lineage
+test_tampered_role_specific_id_is_rejected — changed approval, manifest, fact or evidence ID fails verification
+test_unrelated_financial_lineage_cannot_appear — financial_disclosure is rejected even when its artifacts verify
+test_same_semantic_domain_lineage_replays_same_hash — identical role-specific inputs produce identical bytes and ID
 test_optional_snapshot_ids_are_content_hashed_when_present — changing a real snapshot ID changes bundle hash
 test_reference_price_may_be_available_after_anchor_cutoff — NEXT_SESSION_SAFE historical price is accepted
 test_reference_price_session_must_equal_anchor_session — differing sessions raise contract error
@@ -152,15 +160,48 @@ REQUIRED_LABEL_DOMAINS = (
 )
 ```
 
-Each domain value is a non-empty tuple of exact 64-character lowercase hex
-approval/manifest/fact IDs. Reject `financial_disclosure` as a required-domain
-key rather than silently adding it.
+Define the minimal Phase 2A-only immutable contract:
+
+```python
+@dataclass(frozen=True)
+class DomainLineageV1:
+    domain: str
+    approval_id: str
+    manifest_id: str
+    fact_ids: tuple[str, ...]
+    evidence_ids: tuple[str, ...] = ()
+    content_hash: str = ""
+```
+
+`DomainLineageV1.create` accepts the declared domain plus a typed
+`SourceApprovalArtifactV1`, typed `DatasetManifestV1`, exact fact artifacts and
+optional evidence artifacts. It verifies every artifact before extracting its
+ID, requires `manifest.approval_id == approval.approval_id`, and requires both
+artifacts' `dataset_kind` to equal `domain`. A manifest object cannot occupy the
+approval argument or vice versa. Each fact/evidence input must expose its
+role-specific ID and matching dataset/domain identity; reject unrelated IDs,
+duplicates, invalid hashes, revoked approval evidence and tampered objects.
+`approval_id` and `manifest_id` are mandatory exact lowercase 64-hex IDs.
+
+Permit an empty `fact_ids` only when a frozen per-domain rule in
+`LabelContractV1` says the concrete scenario uses evidence-level coverage
+instead of fact-level identity; the rule names the domain and scenario, and the
+corresponding non-empty `evidence_ids` must validate for that same domain.
+Calendar, Master, Bar, Status and CA otherwise pin the exact facts needed for
+the label interval. Do not accept a bare `tuple[str, ...]` as domain lineage and
+do not infer roles from tuple position or count.
+
+`LabelInputBundleV1.domain_lineage` is a canonical tuple of exactly five
+`DomainLineageV1` values, one for each required domain above, ordered by
+`REQUIRED_LABEL_DOMAINS`. Reject missing, duplicate, additional and
+`financial_disclosure` domain entries rather than silently normalizing them.
 
 - [ ] **Step 5: Implement `LabelContractV1` and `LabelInputBundleV1` minimally**
 
 Freeze contract version `v5.2-label-contract-v1`, horizons `(1, 3, 5)`, five-day
 window, quantization `0.00000001`, rounding `ROUND_HALF_EVEN`, supported CA types
-and the two barrier pairs. The bundle includes exact domain lineage, optional
+and the two barrier pairs. The bundle includes the five typed role-specific
+domain lineage values, optional
 snapshot IDs, anchor boundary/reference, approved exchange sessions, future
 bars/statuses/actions, CA coverage/quarantine/revision dispositions and a hash.
 Do not add any repository loader.
@@ -202,8 +243,10 @@ test_horizons_skip_holiday_and_multiday_market_closure — only supplied open se
 test_horizons_cross_year_boundary — December D resolves January sessions in order
 test_horizon_uses_exchange_sessions_even_when_security_is_suspended — status never changes H values
 test_incomplete_future_sessions_are_pending_not_missing — known H after latest_completed is pending
-test_missing_calendar_coverage_fails_closed — fewer than five known future opens raises coverage error
-test_duplicate_or_unsorted_calendar_is_canonicalized_deterministically — output is sorted and unique
+test_duplicate_calendar_session_fails_closed — repeated approved session raises IncompleteCalendarCoverage
+test_non_monotonic_calendar_order_fails_closed — out-of-order input raises IncompleteCalendarCoverage
+test_anchor_session_missing_from_approved_calendar_fails_closed — absent D raises IncompleteCalendarCoverage
+test_insufficient_future_calendar_coverage_fails_closed — fewer than five approved future sessions raises IncompleteCalendarCoverage
 ```
 
 Use explicit dates and assert H1/H3/H5 plus the exact five-session window.
@@ -226,13 +269,23 @@ def resolve_label_horizons(
     approved_exchange_sessions: tuple[date, ...],
     latest_completed_session: date,
 ) -> LabelHorizonsV1:
-    future = tuple(day for day in sorted(set(approved_exchange_sessions)) if day > anchor_session)
+    if tuple(sorted(approved_exchange_sessions)) != approved_exchange_sessions:
+        raise IncompleteCalendarCoverage("NON_MONOTONIC_APPROVED_CALENDAR")
+    if len(set(approved_exchange_sessions)) != len(approved_exchange_sessions):
+        raise IncompleteCalendarCoverage("DUPLICATE_APPROVED_SESSION")
+    if anchor_session not in approved_exchange_sessions:
+        raise IncompleteCalendarCoverage("ANCHOR_SESSION_ABSENT")
+    future = tuple(day for day in approved_exchange_sessions if day > anchor_session)
+    if len(future) < 5:
+        raise IncompleteCalendarCoverage("INSUFFICIENT_FUTURE_COVERAGE")
     # preserve known H values; mark an H pending when it is after latest_completed_session
 ```
 
-Require that D is present and that calendar lineage supplies at least five
-future approved sessions; otherwise fail closed as calendar coverage, not as a
-security suspension. Never inspect per-security status here.
+Require the pinned Phase 1 calendar to be strictly increasing and unique; never
+sort, deduplicate or otherwise repair malformed lineage in Phase 2A. Require D
+to be present and at least five future approved sessions; fail closed as the
+specific calendar structural error above, not as a security suspension. Never
+inspect per-security status here.
 
 - [ ] **Step 4: Run horizon tests GREEN and contract regression**
 
@@ -722,6 +775,11 @@ test_unavailable_real_reference_slot_blocks_reference_samples_gate — gate rema
 test_all_pass_produces_ready_for_phase2b_yes — exact 16 PASS values set true
 test_acceptance_hash_replays_deterministically — same evidence gives same ID/bytes
 test_acceptance_does_not_create_label_dataset_or_manifest — no matching output path exists
+test_report_contains_all_22_frozen_slots — every slot appears exactly once in the Markdown table
+test_report_row_contains_required_audit_columns_and_evidence_ids — no required cell is omitted
+test_report_exposes_reference_and_independent_result_summaries — numeric results and comparison are reviewable without ignored files
+test_report_exposes_all_required_special_strata — dividend, bonus, suspension, resumption, IPO, delisting, identity, missing bar, unsupported CA, pending and double-barrier rows exist
+test_unavailable_mandatory_slot_is_visible_and_blocks_reference_gate — report says EVIDENCE_UNAVAILABLE, REFERENCE SAMPLES != PASS and READY FOR PHASE 2B = NO
 ```
 
 - [ ] **Step 2: Run acceptance tests RED**
@@ -755,6 +813,38 @@ DETERMINISTIC REPLAY
 
 The CLI reads immutable evidence, verifies IDs/hashes and emits the artifact and
 human report. It must keep `READY FOR PHASE 2B = NO` for any non-PASS gate.
+The report renderer consumes the frozen 22-slot inventory and comparison ledger
+directly after integrity verification; it must not summarize from test fixtures
+or reconstruct evidence from mutable pointers.
+
+Render one human-auditable Markdown row per frozen slot with these exact
+columns:
+
+```text
+slot
+stratum
+canonical security identity
+anchor session
+provenance path
+inventory status
+engine label state
+independent label state
+reference result summary
+independent result summary
+comparison result
+reason / EVIDENCE_UNAVAILABLE
+inventory evidence ID
+independent calculation ID
+comparison evidence ID
+```
+
+Numeric summaries include the canonical label name and final quantized value;
+barrier summaries include `BarrierOutcomeV1`, derived boolean and first decisive
+session. Do not copy every intermediate arithmetic step into Git. The report
+must nevertheless include identifiable rows for cash dividend, bonus share,
+suspension, resumption, IPO boundary, delisting, identity transition, missing
+bar, unsupported CA, `LABEL_PENDING` and double-barrier ambiguity, with their
+actual states/reasons and evidence IDs.
 
 - [ ] **Step 4: Run focused Phase 2A tests**
 
@@ -803,7 +893,14 @@ artifact IDs, file count and bytes; no duplicate artifact or mutable overwrite.
 - [ ] **Step 9: Complete report and diff hygiene**
 
 Update `docs/reports/V5_2_PHASE_2A_ACCEPTANCE.md` with exact commands, test
-counts, inventory/ledger/acceptance IDs, all gate results and remaining blockers.
+counts, inventory/ledger/acceptance IDs, all gate results, remaining blockers and
+the complete 22-slot table defined in Step 3. For every slot, verify the table
+values against the immutable ignored artifacts before committing the report.
+Any mandatory `EVIDENCE_UNAVAILABLE` row must remain visible and force
+`REFERENCE SAMPLES != PASS`, `INDEPENDENT VERIFICATION != PASS` when no valid
+independent result exists, and `READY FOR PHASE 2B = NO`; never hide or aggregate
+it away. The table is the GitHub-auditable evidence summary, while raw and
+intermediate evidence remains ignored under `data/phase_2a/`.
 Add only the scalar Phase 2A usage/boundary to README. Run:
 
 ```powershell
