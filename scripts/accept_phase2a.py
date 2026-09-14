@@ -14,7 +14,7 @@ def main() -> int:
     inventory = build_frozen_inventory()
     calculations = tuple(IndependentLabelCalculationV1.create(slot=s.slot, inventory_evidence_id=s.evidence_ids[0], status="EVIDENCE_UNAVAILABLE", horizons=(), inputs_hash=None, result_summary=(), method_version="phase2a-independent-v1", reason="EXACT_FIVE_DOMAIN_BUNDLE_NOT_YET_ASSEMBLED") for s in inventory.slots)
     ledger = build_comparison_ledger(calculations, {})
-    statuses = tuple((name, "PENDING" if name in {"REFERENCE SAMPLES", "INDEPENDENT VERIFICATION"} else "PASS") for name in ACCEPTANCE_GATES)
+    statuses = tuple((name, "PASS" if name in {"CAUSAL ISOLATION", "DETERMINISTIC REPLAY"} else "PENDING") for name in ACCEPTANCE_GATES)
     acceptance = Phase2AAcceptanceArtifactV1.create(statuses=statuses, evidence_ids=(inventory.inventory_id, ledger.ledger_id))
     artifact = ROOT / "data/phase_2a/governance" / f"phase2a-acceptance-{acceptance.acceptance_id}.json"
     data = json.dumps(asdict(acceptance), ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n"

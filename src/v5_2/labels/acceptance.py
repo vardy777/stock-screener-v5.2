@@ -93,12 +93,17 @@ _REAL_CASES = (
 def build_frozen_inventory() -> LabelAcceptanceInventoryV1:
     rule = LabelAcceptanceSelectionRuleV1.create()
     slots = []
+    evidence_proven_slots = {6, 7, 14, 15}
     for index, (stratum, case) in enumerate(zip(PHASE2A_STRATA, _REAL_CASES), 1):
         identity, day, exchange, board, evidence = case
         candidate = content_hash((rule.contract_version, stratum, identity, day))
+        available = index in evidence_proven_slots
         slots.append(LabelAcceptanceSlotV1(index, stratum, identity, date.fromisoformat(day), exchange, board,
-                                           ProvenancePath.HISTORICAL, "EVIDENCE_AVAILABLE",
-                                           "REAL_PHASE1_ARTIFACT", (evidence,), None, candidate))
+                                           ProvenancePath.HISTORICAL,
+                                           "EVIDENCE_AVAILABLE" if available else "EVIDENCE_UNAVAILABLE",
+                                           "REAL_PHASE1_ARTIFACT", (evidence,),
+                                           None if available else "STRATUM_APPLICABILITY_NOT_YET_PROVEN",
+                                           candidate))
     body = {"selection_rule": rule, "slots": tuple(slots)}
     digest = content_hash({"schema_version": "LabelAcceptanceInventoryV1", **body})
     return LabelAcceptanceInventoryV1(rule, tuple(slots), digest, digest)
