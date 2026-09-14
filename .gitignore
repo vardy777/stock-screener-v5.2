@@ -13,4 +13,5 @@ secrets*
 !.env.example
 !src/v5_2/providers/credentials.py
 /data/
+.worktrees/
 *.log
