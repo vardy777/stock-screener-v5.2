@@ -102,3 +102,63 @@ def build_frozen_inventory() -> LabelAcceptanceInventoryV1:
     body = {"selection_rule": rule, "slots": tuple(slots)}
     digest = content_hash({"schema_version": "LabelAcceptanceInventoryV1", **body})
     return LabelAcceptanceInventoryV1(rule, tuple(slots), digest, digest)
+
+
+@dataclass(frozen=True, slots=True)
+class IndependentLabelCalculationV1:
+    slot: int
+    inventory_evidence_id: str
+    status: str
+    horizons: tuple[str, ...]
+    inputs_hash: str | None
+    result_summary: tuple[tuple[str, str, str, str], ...]
+    method_version: str
+    reason: str | None
+    calculation_id: str
+    content_hash: str
+
+    @classmethod
+    def create(cls, *, slot: int, inventory_evidence_id: str, status: str, horizons: tuple[str, ...],
+               inputs_hash: str | None, result_summary: tuple[tuple[str, str, str, str], ...],
+               method_version: str, reason: str | None = None):
+        if status == "CALCULATED" and (not horizons or not inputs_hash or not result_summary or reason): raise ValueError("calculated reference requires complete evidence")
+        if status == "EVIDENCE_UNAVAILABLE" and (result_summary or not reason): raise ValueError("unavailable reference requires reason and no result")
+        body = {"slot": slot, "inventory_evidence_id": inventory_evidence_id, "status": status, "horizons": horizons, "inputs_hash": inputs_hash, "result_summary": result_summary, "method_version": method_version, "reason": reason}
+        digest = content_hash({"schema_version": cls.__name__, **body})
+        return cls(**body, calculation_id=digest, content_hash=digest)
+
+    def verify(self):
+        body = {name: getattr(self, name) for name in ("slot", "inventory_evidence_id", "status", "horizons", "inputs_hash", "result_summary", "method_version", "reason")}
+        return self.calculation_id == self.content_hash == content_hash({"schema_version": type(self).__name__, **body})
+
+
+@dataclass(frozen=True, slots=True)
+class ComparisonEntryV1:
+    slot: int
+    calculation_id: str
+    disposition: str
+    engine_summary: tuple[tuple[str, str, str, str], ...]
+    independent_summary: tuple[tuple[str, str, str, str], ...]
+    reason: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class EngineComparisonLedgerV1:
+    entries: tuple[ComparisonEntryV1, ...]
+    ledger_id: str
+    content_hash: str
+
+    def verify(self):
+        digest = content_hash({"schema_version": type(self).__name__, "entries": self.entries})
+        return self.ledger_id == self.content_hash == digest
+
+
+def build_comparison_ledger(calculations: tuple[IndependentLabelCalculationV1, ...], engine_results: dict[int, tuple[tuple[str, str, str, str], ...]]) -> EngineComparisonLedgerV1:
+    entries = []
+    for item in calculations:
+        if not item.verify(): raise ValueError("tampered independent calculation")
+        engine = engine_results.get(item.slot, ()) if item.status == "CALCULATED" else ()
+        disposition = "EVIDENCE_UNAVAILABLE" if item.status != "CALCULATED" else "MATCH" if engine == item.result_summary else "MISMATCH"
+        entries.append(ComparisonEntryV1(item.slot, item.calculation_id, disposition, engine, item.result_summary, item.reason))
+    digest = content_hash({"schema_version": "EngineComparisonLedgerV1", "entries": tuple(entries)})
+    return EngineComparisonLedgerV1(tuple(entries), digest, digest)
