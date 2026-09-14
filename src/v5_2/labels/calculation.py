@@ -6,7 +6,7 @@ from decimal import Decimal, ROUND_HALF_EVEN
 
 from v5_2.data.corporate_action_facts import ActionType, CorporateActionFactV1
 from v5_2.data.daily_bar_facts import DailyBarFactV1
-from v5_2.labels.contracts import LabelReasonCode, LabelReferencePrice
+from v5_2.labels.contracts import BarrierOutcomeV1, LabelReasonCode, LabelReferencePrice
 
 
 class IncompleteCalendarCoverage(ValueError):
@@ -138,3 +138,26 @@ def calculate_outcome_labels(path: EconomicWealthPathV1) -> dict[str, Decimal]:
     returns["max_favorable_excursion_5d"] = quantize_label(max((Decimal("0"), *(value / denominator - 1 for value in highs if value is not None))))
     returns["max_adverse_excursion_5d"] = quantize_label(min((Decimal("0"), *(value / denominator - 1 for value in lows if value is not None))))
     return returns
+
+
+@dataclass(frozen=True, slots=True)
+class BarrierCalculationV1:
+    outcome: BarrierOutcomeV1
+    first_decisive_session: date | None
+    boolean_value: bool
+
+
+def calculate_barrier(path: EconomicWealthPathV1, upper_return: Decimal, lower_return: Decimal) -> BarrierCalculationV1:
+    for point in path.points:
+        if not point.intraday_trade:
+            continue
+        assert point.high_wealth is not None and point.low_wealth is not None
+        upper = point.high_wealth / path.reference_price - 1 >= upper_return
+        lower = point.low_wealth / path.reference_price - 1 <= lower_return
+        if upper and lower:
+            raise UnsafeLabelInput(LabelReasonCode.BARRIER_PATH_AMBIGUOUS, point.session)
+        if upper:
+            return BarrierCalculationV1(BarrierOutcomeV1.UPPER_FIRST, point.session, True)
+        if lower:
+            return BarrierCalculationV1(BarrierOutcomeV1.LOWER_FIRST, point.session, False)
+    return BarrierCalculationV1(BarrierOutcomeV1.NEITHER, None, False)
