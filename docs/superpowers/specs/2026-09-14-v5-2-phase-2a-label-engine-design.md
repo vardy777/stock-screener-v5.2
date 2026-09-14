@@ -1,6 +1,6 @@
 # V5.2 Phase 2A Label Contract and Reference Engine Design
 
-Status: `PROPOSED FOR CHATGPT REVIEW`
+Status: `REVISED FOR CHATGPT REVIEW`
 
 ## 1. Scope and frozen base
 
@@ -27,11 +27,24 @@ frozen acceptance inventory and independent reference ledger
 
 It will not implement Phase 2B historical traversal or a label dataset.
 
+Canonical Core V1 labels are:
+
+```text
+return_1d
+return_3d
+return_5d
+max_favorable_excursion_5d
+max_adverse_excursion_5d
+hit_3pct_before_-2pct
+hit_5pct_before_-3pct
+```
+
 ## 2. Reused Phase 1 contracts
 
 Phase 2A consumes, without redefining:
 
-- `ResearchDataSnapshotV1` and its six exact manifest IDs;
+- `ResearchDataSnapshotV1` and its exact manifest IDs when a real snapshot
+  exists for the relevant contemporaneous observation;
 - approved trading-calendar sessions;
 - Security Master identity and lifecycle lineage;
 - Research Eligible Universe and `IPO_SEASONING_SESSIONS = 5`;
@@ -85,46 +98,71 @@ file is a valid label-engine input.
 
 ```text
 FEATURE SIDE
-anchor snapshot facts with available_at <= anchor_cutoff only
+AnchorKnowledgeBoundary facts with available_at <= anchor_cutoff only
 
 ================ STRICT CAUSAL BOUNDARY ================
 
 LABEL SIDE
-anchor snapshot + later approved outcome facts
+LabelReferencePrice + later approved outcome facts
 ```
 
 The boundary is machine-enforced as follows:
 
 1. `v5_2.features` must not import `v5_2.labels` or label result types.
-2. Label-only future facts live in `LabelInputBundleV1`; this type is forbidden
-   from the feature namespace and feature tests/fixtures.
+2. `LabelReferencePrice`, label-only future facts and their lineage live in
+   `LabelInputBundleV1`; all three are forbidden from the feature namespace and
+   feature tests/fixtures.
 3. The reference engine receives values, not repositories or filesystem paths.
    It has no provider, network, raw-cache, current-pointer or environment access.
-4. The input bundle pins an anchor snapshot ID, outcome snapshot ID, all used
-   manifest IDs and exact fact IDs. The engine rejects missing, tampered,
-   revoked, mismatched or unpinned lineage.
+4. The input bundle always pins exact domain approvals, manifests and fact IDs.
+   It pins anchor/outcome snapshot IDs only when those real snapshots exist.
+   The engine rejects missing, tampered, revoked, mismatched or unpinned
+   required-domain lineage.
 5. A governance AST test rejects feature imports of labels and label imports of
    providers/integrations/raw acquisition. A sentinel test proves future values
    cannot appear in feature artifacts or shared fixtures.
-6. Label `observed_at` is output metadata only. It must never be copied into an
-   anchor fact or used as anchor knowledge.
+6. Label `observed_at` and `LabelReferencePrice.available_at` are label-side
+   metadata only. They must never be copied into an anchor knowledge fact.
 
 The logical dependency is one-way: Phase 1 facts feed both future Feature work
 and Labels; Labels never feed Features.
 
 ## 5. Anchor and session contract
 
-For every formal label:
+Phase 2A freezes two separate anchor concepts:
 
 ```text
-anchor_session = D
-anchor_cutoff = frozen D-close research cutoff under the pinned snapshot
-anchor_price = approved unadjusted D close
+AnchorKnowledgeBoundary
+    anchor_session = D
+    anchor_cutoff = frozen D-close research cutoff
+    eligible/PIT facts require available_at <= anchor_cutoff
+
+LabelReferencePrice
+    session = D
+    price = approved unadjusted D close
+    daily_bar_fact_id and manifest lineage are mandatory
+    available_at may be later than anchor_cutoff
 ```
 
-The anchor security must be in the Phase 1 Research Eligible Universe at D,
-including the frozen five-session IPO seasoning rule. D must have a valid close,
-resolved identity and status. Phase 2 does not recalculate eligibility.
+The AnchorKnowledgeBoundary governs Research Eligible Universe membership and
+all future Feature-side inputs. The anchor security must be eligible at D under
+the frozen five-session IPO seasoning rule, with resolved identity/status at the
+anchor cutoff. Phase 2 does not recalculate eligibility.
+
+The LabelReferencePrice is a prediction-target reference on the LABEL SIDE. For
+historical reconstructed bars it may have `available_at > anchor_cutoff`,
+including `NEXT_SESSION_SAFE @ next approved session 16:30`. This is valid label
+reconstruction and is not evidence that D close was historically available to
+feature computation. The invariant is explicit:
+
+```text
+D close used as label reference
+!=
+D close proven available to historical feature computation
+```
+
+The reference bar must still be approved, immutable, identity-correct and
+unadjusted. Failure to keep it label-only is causal leakage.
 
 Let `E(D, k)` be the kth approved exchange-open session strictly after D:
 
@@ -137,8 +175,8 @@ window_5d = [E(D, 1), ..., E(D, 5)]
 
 Natural dates and provider row order are forbidden. SSE and SZSE calendar
 disagreement, missing calendar coverage or an uncompleted Hk makes the affected
-label fail closed. If Hk has not yet completed in the outcome snapshot, its
-state is `LABEL_PENDING`, not missing.
+label fail closed. If Hk has not yet completed in the pinned outcome lineage,
+its state is `LABEL_PENDING`, not missing.
 
 ## 6. Label states and result granularity
 
@@ -297,21 +335,31 @@ The numerator is economic wealth at the exact exchange-session endpoint. The
 denominator is unadjusted D close for one initial share. There is no natural-day
 counting and no next-tradable-session substitution.
 
-### 10.2 Maximum upside and drawdown
+### 10.2 Maximum favorable and adverse excursion
 
 ```text
-max_upside_5d  = quantize(max(0, R_high(s) for s in window_5d))
-max_drawdown_5d = quantize(min(0, R_low(s) for s in window_5d))
+max_favorable_excursion_5d = quantize(max(0, R_high(s) for s in window_5d))
+max_adverse_excursion_5d   = quantize(min(0, R_low(s) for s in window_5d))
 ```
 
 These labels use future daily high and low because they describe favorable and
-adverse path excursion from the known anchor price. Despite its product name,
-`max_drawdown_5d` is explicitly anchor-relative maximum adverse excursion, not
-classical peak-to-subsequent-trough drawdown. Limit-up/limit-down prices are
-ordinary valid observations after the frozen bar checks. A supported corporate
-action is handled by the wealth transform rather than mistaken for a price jump.
+adverse path excursion from the label reference price. The canonical research
+fields are MFE/MAE and MAE is not classical peak-to-subsequent-trough drawdown.
+`max_upside_5d` and `max_drawdown_5d` may exist only as UI/display aliases; they
+must never appear as canonical stored label names. Limit-up/limit-down prices
+are ordinary valid observations after the frozen bar checks. A supported
+corporate action is handled by the wealth transform rather than mistaken for a
+price jump.
 
 ### 10.3 Barrier labels
+
+`BarrierOutcomeV1` is the minimal immutable calculation outcome:
+
+```text
+UPPER_FIRST
+LOWER_FIRST
+NEITHER
+```
 
 For `(u, l)` equal to `(0.03, -0.02)` and `(0.05, -0.03)`, inspect the five
 future sessions in chronological order:
@@ -321,9 +369,9 @@ upper_hit(s) = R_high(s) >= u
 lower_hit(s) = R_low(s) <= l
 ```
 
-- first decisive session upper only: `true`;
-- first decisive session lower only: `false`;
-- neither by H5: `false`;
+- first decisive session upper only: `BarrierOutcomeV1.UPPER_FIRST`;
+- first decisive session lower only: `BarrierOutcomeV1.LOWER_FIRST`;
+- neither by H5: `BarrierOutcomeV1.NEITHER`;
 - both on the first decisive session: `NOT_LABEL_SAFE` with
   `BARRIER_PATH_AMBIGUOUS` because daily OHLC cannot prove intraday order.
 
@@ -331,8 +379,26 @@ A prior-session decisive hit ends evaluation, so later ambiguity is irrelevant.
 A gap can decide a barrier through valid open/high/low values. A proven suspended
 session cannot hit either barrier. Limit prices require no special override.
 
-The engine also records the first decisive session internally in calculation
-evidence, although the public V1 label value remains boolean.
+Immutable calculation evidence retains `BarrierOutcomeV1` and the first
+decisive session. The public boolean labels are derived without destroying that
+information:
+
+```text
+UPPER_FIRST -> true
+LOWER_FIRST -> false
+NEITHER     -> false
+```
+
+### 10.4 Prediction target, not executable PnL
+
+All Core V1 values describe future price movement or economic holding wealth
+relative to the D-close LabelReferencePrice. They are prediction-target truth,
+not after-close strategy executable realized return. A researcher operating
+after D close cannot retroactively transact at that close.
+
+Execution-aware evaluation of D+1 open, overnight gap, order tradability,
+limit-state execution, fees and slippage belongs to later Research Evaluation /
+Confirmation phases. None of those concerns changes the Phase 2A label formula.
 
 ## 11. Deferred label
 
@@ -349,30 +415,60 @@ and pass that immutable value into a later label-contract version.
 ```text
 canonical_security_identity
 anchor_session
-anchor_cutoff
-anchor_snapshot_id
-outcome_snapshot_id
-pinned_manifest_ids
+AnchorKnowledgeBoundary value and evidence ID
+LabelReferencePrice value and Daily Bar fact ID
+anchor_snapshot_id        # optional; only when a real snapshot exists
+outcome_snapshot_id       # optional; only when a real snapshot exists
+provenance_path           # HISTORICAL or CONTEMPORANEOUS
+Calendar approval/manifest/fact IDs
+Security Master approval/manifest/identity fact IDs
+Daily Bar approval/manifest/fact IDs
+Security Status approval/manifest/fact IDs
+Corporate Action approval/manifest/fact IDs
 calendar_sessions D..H5
 anchor eligibility evidence ID
 dated identity-chain evidence IDs
-anchor and future DailyBarFact IDs/values
 future Security Status fact IDs/values
 Corporate Action approval/manifest/fact IDs and exact coverage disposition
 label_contract_version
 bundle_hash
 ```
 
-The anchor snapshot proves what was legally usable at D. The outcome snapshot
-must be immutable, research-ready and cover Hk before a kth-horizon label can be
-available. Future facts may have `available_at > anchor_cutoff`; that is expected
-on the label side. Every output pins `observed_at = max(outcome session close,
+Two provenance paths are formally supported:
+
+```text
+HISTORICAL
+approved immutable Phase 1B lineage
+-> LabelInputBundleV1
+
+CONTEMPORANEOUS / PRODUCTION
+real ResearchDataSnapshot + its exact immutable domain lineage
+-> LabelInputBundleV1
+```
+
+Historical materialization never manufactures synthetic daily
+`ResearchDataSnapshot` artifacts. Snapshot IDs are optional provenance that are
+pinned when real snapshots exist; exact required-domain lineage is mandatory in
+both paths. Both paths converge on the same `LabelContractV1` and
+`ReferenceLabelEngine`, and snapshot presence cannot change formulas or states.
+
+Label availability is domain-minimal. Price/status/Corporate Action labels
+require valid Calendar, Security Master/identity, Daily Bar, Security Status and
+Corporate Action lineage for their exact interval. They do not require Financial
+Disclosure readiness or any other unrelated domain. A contemporaneous snapshot
+may contain six domains, but an unrelated scoped/not-ready domain cannot alter a
+label whose actual dependencies remain valid.
+
+Future facts and the LabelReferencePrice may have
+`available_at > AnchorKnowledgeBoundary.anchor_cutoff`; that is expected on the
+label side. Every output pins `observed_at = max(outcome session close,
 available_at of every fact required for that label)`.
 
 The small, pure `ReferenceLabelEngine` evaluates in this fixed order:
 
 1. contract and bundle content integrity;
-2. anchor/outcome snapshot and manifest lineage;
+2. provenance-path validity, optional snapshot integrity, and mandatory exact
+   required-domain lineage;
 3. anchor Research Eligible Universe membership;
 4. approved calendar and horizon completion;
 5. identity chain;
@@ -401,8 +497,9 @@ introduced.
 
 Before any engine results are calculated, Phase 2A implementation must publish
 one immutable `LabelAcceptanceInventoryV1` containing exact security identity,
-anchor session, stratum, anchor snapshot, outcome snapshot, expected source
-evidence types and selection-rule version. Samples cannot be removed or replaced
+anchor session, stratum, provenance path, optional real snapshot IDs, mandatory
+domain-lineage IDs, expected source evidence types and selection-rule version.
+Samples cannot be removed or replaced
 after outcomes are observed. Inapplicable candidates are rejected during a
 separate pre-result validity pass with recorded reasons.
 
@@ -459,7 +556,7 @@ Each frozen case receives a separate immutable
 reference engine. It records:
 
 ```text
-anchor price and fact ID
+LabelReferencePrice and Daily Bar fact ID
 H1/H3/H5 session derivation
 every future OHLC input and fact ID
 status interpretation
@@ -472,8 +569,9 @@ content hash
 ```
 
 The verifier compares engine and independent records field by field: anchor,
-horizons, price inputs, economic transformations, numeric/boolean result, state,
-reason and lineage. A mismatch, unavailable required real sample, or calculation
+horizons, price inputs, economic transformations, numeric/boolean result,
+`BarrierOutcomeV1`, state, reason and lineage. A mismatch, unavailable required
+real sample, or calculation
 made by shared production code fails the gate. Synthetic unit tests supplement
 but never replace this ledger.
 
@@ -486,7 +584,7 @@ LABEL CONTRACT = FROZEN
 CAUSAL ISOLATION = PASS
 TRADING SESSION SEMANTICS = PASS
 RETURN SEMANTICS = PASS
-UPSIDE/DRAWDOWN SEMANTICS = PASS
+MFE/MAE SEMANTICS = PASS
 BARRIER SEMANTICS = PASS
 CORPORATE ACTION SAFETY = PASS
 SUSPENSION SAFETY = PASS
@@ -522,7 +620,8 @@ bulk deterministic calculation
 per-label AVAILABLE/PENDING/NOT_SAFE coverage accounting
 reason-coded exclusions and systematic-defect audit
 immutable partitioned label facts
-Label DatasetManifest pinned to input snapshot/manifests and contract version
+Label DatasetManifest pinned to exact input domain lineage, optional real
+snapshot provenance, and contract version
 deterministic rematerialization and broad historical acceptance
 ```
 
