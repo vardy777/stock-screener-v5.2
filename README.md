@@ -21,6 +21,21 @@ Editable installation is for this repository only. Local-path or old-project
 dependencies are prohibited. The package must also pass a non-editable wheel
 installation in clean-room acceptance.
 
+## Manual data refresh
+
+Phase 1C exposes one backend entrypoint for CLI and future API/frontend callers:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\refresh_data.py
+```
+
+`CURRENT` means a valid immutable snapshot is ready for the resolved latest
+completed trading session. `STALE` means the last valid snapshot predates that
+target, `INCOMPLETE` means some required dataset did not become ready, and
+`FAILED` means target resolution or refresh execution failed. On failure, use
+the reported dataset reasons and retry; the last successful snapshot remains
+unchanged and is never presented as current.
+
 ## Hard safety boundary
 
 `research_locked=true`; broker orders are disabled. V5.2 does not provide live

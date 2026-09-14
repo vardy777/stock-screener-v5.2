@@ -5,7 +5,7 @@ from urllib.error import HTTPError
 
 import pytest
 
-from v5_2.integrations.datahub_http import DataHubHttpTransport, TransportError
+from v5_2.integrations.datahub_http import DataHubHttpTransport, TransportError, TransientTransportError
 
 
 class Response:
@@ -60,6 +60,7 @@ def test_http_and_decode_failures_are_sanitized() -> None:
     with pytest.raises(TransportError) as caught:
         DataHubHttpTransport(opener=failed)("daily", "sentinel", {})
     assert "sentinel" not in str(caught.value)
+    assert not isinstance(caught.value, TransientTransportError)
 
     with pytest.raises(TransportError, match="invalid JSON"):
         DataHubHttpTransport(opener=lambda *_args, **_kwargs: ResponsePayload(b"bad"))(

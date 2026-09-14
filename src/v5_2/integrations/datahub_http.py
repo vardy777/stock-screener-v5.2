@@ -4,6 +4,7 @@ from collections.abc import Callable, Mapping
 import json
 from typing import Any
 from urllib.parse import urlencode
+from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 from v5_2.providers.datahub import DATAHUB_ENDPOINTS
@@ -57,6 +58,10 @@ class DataHubHttpTransport:
                 payload = json.loads(response.read())
         except json.JSONDecodeError:
             raise TransportError("provider returned invalid JSON") from None
+        except HTTPError as error:
+            if 400 <= error.code < 500:
+                raise TransportError("provider rejected HTTP request") from None
+            raise TransientTransportError("provider HTTP request failed") from None
         except Exception:
             raise TransientTransportError("provider HTTP request failed") from None
         if not isinstance(payload, Mapping):
