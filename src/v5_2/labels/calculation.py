@@ -122,3 +122,19 @@ QUANT = Decimal("0.00000001")
 
 def quantize_label(value: Decimal) -> Decimal:
     return value.quantize(QUANT, rounding=ROUND_HALF_EVEN)
+
+
+def calculate_outcome_labels(path: EconomicWealthPathV1) -> dict[str, Decimal]:
+    if len(path.points) != 5:
+        raise ValueError("five exchange-session points are required")
+    denominator = path.reference_price
+    returns = {
+        "return_1d": quantize_label(path.points[0].close_wealth / denominator - 1),
+        "return_3d": quantize_label(path.points[2].close_wealth / denominator - 1),
+        "return_5d": quantize_label(path.points[4].close_wealth / denominator - 1),
+    }
+    highs = tuple((point.high_wealth if point.intraday_trade else point.close_wealth) for point in path.points)
+    lows = tuple((point.low_wealth if point.intraday_trade else point.close_wealth) for point in path.points)
+    returns["max_favorable_excursion_5d"] = quantize_label(max((Decimal("0"), *(value / denominator - 1 for value in highs if value is not None))))
+    returns["max_adverse_excursion_5d"] = quantize_label(min((Decimal("0"), *(value / denominator - 1 for value in lows if value is not None))))
+    return returns
