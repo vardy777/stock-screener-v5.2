@@ -8,6 +8,12 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from v5_2.data.identity import canonical_json, content_hash
+from v5_2.data.daily_bar_lineage import (
+    DailyBarLineageError,
+    DailyBarSourceBindingV1,
+    HistoricalExitDailyBarAvailabilityEvidenceV2,
+    validate_daily_bar_lineage,
+)
 from v5_2.data.phase_1b_exit import (
     SHANGHAI,
     HistoricalResearchCutoffContractV1,
@@ -31,10 +37,12 @@ PINNED_DATASETS = {
         "manifest": "data/phase_1b_exit_remediation/governance/security-master-complete-manifest-{manifest_id}.json",
     },
     "daily_bar": {
-        "approval_id": "fc26bf140708a72957f687757665508ee439cb079b9bdaff86686109b7683ea5",
-        "manifest_id": "76c4fe58d0714405d0a6a826bf9b814237d812f88f69b63986a0e0317f924b4b",
-        "approval": "data/phase_1b_exit_remediation/governance/daily_bar-approval-{approval_id}.json",
-        "manifest": "data/phase_1b_exit_remediation/governance/daily_bar-manifest-{manifest_id}.json",
+        "approval_id": "31d91fd99630e3b63b585ae598e7728fe1922454c3dbee276d0ffe9e7b24d79f",
+        "manifest_id": "118744559f5869bcbe75b402870524a18ec6f42e813764568bec6c7f070bf5ad",
+        "approval": "data/phase_1b_lineage_remediation/governance/daily_bar-approval-{approval_id}.json",
+        "manifest": "data/phase_1b_lineage_remediation/governance/daily_bar-manifest-{manifest_id}.json",
+        "binding": "data/phase_1b_lineage_remediation/governance/daily-bar-source-binding-cd5d2cce173f38a896167399740f0f0f1b550bdf5e37b5bdaaa10a689861b771.json",
+        "availability": "data/phase_1b_lineage_remediation/governance/daily-bar-availability-c52bcc200d4201dae909ee00a95b6a314b8648502cdb9b9ccadd3a6ab8522082.json",
     },
     "daily_security_status": {
         "approval_id": "ac1c23dae38c32228bfc6639714976e6a01063b230ae3397ee45d9ac1d8afa07",
@@ -121,6 +129,23 @@ def load_and_verify_lineage(repo_root: Path) -> dict[str, dict[str, Any]]:
             and approval.get("decision") in {"APPROVED", "APPROVED_WITH_RULES"}
             and approval.get("approval_id") not in revoked
         )
+        if dataset == "daily_bar":
+            binding_raw = _load(repo_root / pin["binding"])
+            availability_raw = _load(repo_root / pin["availability"])
+            binding = DailyBarSourceBindingV1(
+                **{**binding_raw, "payload_hashes": tuple(binding_raw["payload_hashes"]),
+                   "requested_fields": tuple(binding_raw["requested_fields"])})
+            availability = HistoricalExitDailyBarAvailabilityEvidenceV2(
+                **{**availability_raw,
+                   "coverage_start": date.fromisoformat(availability_raw["coverage_start"]),
+                   "coverage_end": date.fromisoformat(availability_raw["coverage_end"]),
+                   "parent_evidence_ids": tuple(availability_raw["parent_evidence_ids"])})
+            try:
+                validate_daily_bar_lineage(
+                    binding=binding, availability=availability, approval=approval,
+                    manifest=manifest, revoked_approval_ids=revoked)
+            except DailyBarLineageError:
+                pin_valid = False
         results[dataset] = {"approval": approval, "manifest": manifest,
             "approval_id": pin["approval_id"], "manifest_id": pin["manifest_id"],
             "valid": approval_valid and manifest_valid and pin_valid}
