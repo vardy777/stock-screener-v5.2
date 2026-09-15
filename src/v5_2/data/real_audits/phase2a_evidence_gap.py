@@ -120,6 +120,14 @@ def audit_phase2a_evidence_gaps(root: Path) -> Phase2AEvidenceGapAuditV1:
             if identity in bars:
                 bars[identity].add(fact["session"])
                 bar_paths[identity].add(path.as_posix())
+    backfill_dir = root / "data/phase_2a/bar_backfill/approved"
+    for path in backfill_dir.glob("daily-bar-facts-*.json"):
+        bundle = _load(path)
+        for fact in bundle.get("facts", ()):
+            identity = fact["security_identity"]
+            if identity in bars:
+                bars[identity].add(fact["session"])
+                bar_paths[identity].add(path.relative_to(root).as_posix())
 
     status_dir = root / "data/phase_1b2a/facts/daily_security_status"
     statuses: dict[str, set[str]] = {identity: set() for identity in identities}
@@ -140,9 +148,17 @@ def audit_phase2a_evidence_gaps(root: Path) -> Phase2AEvidenceGapAuditV1:
         bar_identities = (identity, "302132.SZ") if number == 15 else (identity,)
         present_bars = set().union(*(bars[value] for value in bar_identities))
         anchor_found = anchor in present_bars
-        future_found = sum(day in present_bars for day in future)
+        suspended_future = {day for day in future if day in statuses[identity] and any(
+            _load(path).get("is_suspended") is True
+            for path in (root / "data/phase_1b2a/facts/daily_security_status").glob("*.json")
+            if _load(path).get("security_identity") == identity and _load(path).get("session") == day
+        )}
+        required_future = tuple(day for day in future if day not in suspended_future)
+        future_found = sum(day in present_bars for day in required_future)
         status_found = sum(day in statuses[identity] for day in (anchor, *future))
-        old_bar_gap = number in {6, 7, 8, 9, 10, 11, 12, 13, 14, 17}
+        old_bar_scope = number in {6, 7, 8, 9, 10, 11, 12, 13, 14, 17}
+        bar_complete = anchor_found and future_found == len(required_future)
+        old_bar_gap = old_bar_scope and not bar_complete
         blocker = "REAL_PHASE1_EVIDENCE_ABSENT" if old_bar_gap else "ASSEMBLER_LOOKUP_DEFECT"
         missing = "daily_bar" if old_bar_gap else "LabelInputBundleV1 assembler"
         reason = (
@@ -162,9 +178,10 @@ def audit_phase2a_evidence_gaps(root: Path) -> Phase2AEvidenceGapAuditV1:
             slot=number, stratum=slot["stratum"], canonical_identity=identity,
             anchor_session=anchor, calendar_status="APPROVED_OPEN_SESSION_WINDOW_FOUND" if len(future) == 5 else "FUTURE_WINDOW_INCOMPLETE",
             master_status="IDENTITY_IN_COMPLETE_MASTER" if identity in master else "IDENTITY_SUPPLEMENT_REQUIRED",
-            daily_bar_status=("D_AND_REQUIRED_WINDOW_FOUND" if anchor_found and future_found == 5 else
+            daily_bar_status=("D_AND_REQUIRED_WINDOW_FOUND_WITH_PROVEN_ABSENCE" if bar_complete and suspended_future else
+                              "D_AND_REQUIRED_WINDOW_FOUND" if bar_complete else
                               "ANCHOR_AND_REQUIRED_WINDOW_ABSENT" if not anchor_found and future_found == 0 else
-                              f"PARTIAL_{int(anchor_found)}_PLUS_{future_found}_OF_5"),
+                              f"PARTIAL_{int(anchor_found)}_PLUS_{future_found}_OF_{len(required_future)}"),
             security_status_status=("EXACT_D_AND_WINDOW_FOUND" if status_found == 6 else
                                     "PARTIAL_SPECIAL_EVENT_FACTS_FOUND" if status_found else
                                     "PANEL_EXISTS_EXACT_DAILY_FACTS_NOT_MATERIALIZED"),
@@ -179,12 +196,13 @@ def audit_phase2a_evidence_gaps(root: Path) -> Phase2AEvidenceGapAuditV1:
             missing_artifact_id_or_lookup_key=f"{identity}:{anchor}:{future[-1] if future else 'NO_H5'}",
             lookup_location_checked=("data/phase_1b1/facts/daily_bar", "data/phase_1b2a/facts/daily_security_status",
                                      "data/phase_1b2c/approved", "data/phase_1b_exit_remediation/governance",
-                                     "data/phase_1b1_2026_extension/governance"),
+                                     "data/phase_1b1_2026_extension/governance", "data/phase_2a/bar_backfill/approved"),
             candidate_artifacts_found=tuple(sorted(candidates)), bundle_constructible=False,
             blocker_class=blocker, blocker_reason=reason,
         ))
     counts = tuple((name, sum(entry.blocker_class == name for entry in entries)) for name in BLOCKER_CLASSES)
-    common = "No repository-facing evidence assembler exists; additionally ten frozen pre-2024 slots lack approved materialized Daily Bar anchor/future facts."
+    remaining = sum(entry.blocker_class == "REAL_PHASE1_EVIDENCE_ABSENT" for entry in entries)
+    common = f"No repository-facing evidence assembler exists; {remaining} frozen slots retain real approved Daily Bar evidence gaps after targeted backfill."
     body = {"inventory_id": INVENTORY_ID, "entries": tuple(entries), "counts": counts, "common_root_cause": common}
     digest = content_hash({"schema_version": "Phase2AEvidenceGapAuditV1", **body})
     return Phase2AEvidenceGapAuditV1(**body, audit_id=digest, content_hash=digest)
@@ -217,6 +235,6 @@ def render_evidence_gap_matrix(audit: Phase2AEvidenceGapAuditV1) -> str:
         )
     lines.extend([
         "", "## Closure consequence", "",
-        "The required five-slot pilot cannot run because the frozen suspension and corporate-action slots lack approved materialized Daily Bar anchor/future facts. Phase 2A remains PENDING and Phase 2B remains prohibited.", "",
+        "The targeted publication closed only the slots supported by the frozen provider payloads. Remaining REAL_PHASE1_EVIDENCE_ABSENT entries fail closed, so the five-slot pilot must not run. Phase 2A remains PENDING and Phase 2B remains prohibited.", "",
     ])
     return "\n".join(lines)

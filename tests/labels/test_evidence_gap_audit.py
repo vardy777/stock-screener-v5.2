@@ -33,9 +33,11 @@ def test_gap_audit_distinguishes_missing_old_bars_from_unimplemented_assembly():
 
     assert by_slot[1].daily_bar_status == "D_AND_REQUIRED_WINDOW_FOUND"
     assert by_slot[1].blocker_class == "ASSEMBLER_LOOKUP_DEFECT"
-    assert by_slot[6].daily_bar_status == "ANCHOR_AND_REQUIRED_WINDOW_ABSENT"
-    assert by_slot[6].blocker_class == "REAL_PHASE1_EVIDENCE_ABSENT"
+    assert by_slot[6].daily_bar_status == "D_AND_REQUIRED_WINDOW_FOUND"
+    assert by_slot[6].blocker_class == "ASSEMBLER_LOOKUP_DEFECT"
     assert by_slot[8].security_status_status == "PARTIAL_SPECIAL_EVENT_FACTS_FOUND"
+    assert by_slot[8].daily_bar_status == "D_AND_REQUIRED_WINDOW_FOUND_WITH_PROVEN_ABSENCE"
+    assert by_slot[9].blocker_class == "REAL_PHASE1_EVIDENCE_ABSENT"
     assert by_slot[18].future_window_status == "CALENDAR_EXTENSION_FOUND"
 
 
@@ -59,8 +61,8 @@ def test_gap_matrix_renders_each_frozen_slot_and_exact_blocker_counts():
 
     assert report.count("\n| 01 |") == 1
     assert report.count("\n| 22 |") == 1
-    assert "ASSEMBLER_LOOKUP_DEFECT COUNT = 12" in report
-    assert "REAL_PHASE1_EVIDENCE_ABSENT COUNT = 10" in report
+    assert "ASSEMBLER_LOOKUP_DEFECT COUNT = 18" in report
+    assert "REAL_PHASE1_EVIDENCE_ABSENT COUNT = 4" in report
     assert "EVIDENCE_UNAVAILABLE" not in report.split("## 22-slot blocker matrix", 1)[0]
 
 

@@ -1,9 +1,10 @@
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 
-from v5_2.data.real_audits.phase2a_bar_backfill import publishable_backfill_facts
+from v5_2.data.real_audits.phase2a_bar_backfill import load_validated_backfill, publishable_backfill_facts
 from v5_2.data.real_audits.daily_bar_availability import (
     DailyBarAvailabilityBasis,
     DailyBarAvailabilityError,
@@ -12,6 +13,7 @@ from v5_2.data.real_audits.daily_bar_availability import (
 
 
 SHANGHAI = timezone(timedelta(hours=8))
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def test_backfill_normalizes_units_and_uses_next_session_safe():
@@ -89,3 +91,21 @@ def test_frozen_availability_policy_rejects_source_version_mismatch():
             date(2021, 6, 1), next_session=date(2021, 6, 2),
             evidence=Evidence(), source_version_identity="approval-version",
         )
+
+
+@pytest.mark.skipif(not (ROOT / "data/phase_2a/bar_backfill/raw").is_dir(), reason="real artifacts excluded")
+def test_real_quarantined_backfill_integrity_and_receipts_are_revalidated_without_network():
+    result = load_validated_backfill(ROOT)
+
+    assert result.inventory_id == "70c7d78674a9584704f3e8f4306584cc479d61e529d482f5abfe314cfd7f3494"
+    assert len(result.payload_hashes) == 10
+    assert len(result.receipt_hashes) == 10
+    assert len(result.rows) == 43
+    assert result.rejected_rows == ()
+    assert result.unexplained_missing_sessions == (
+        (9, "2019-04-12"), (9, "2019-04-16"),
+        (10, "2015-11-16"), (10, "2015-11-18"), (10, "2015-11-19"),
+        (10, "2015-11-20"), (10, "2015-11-23"), (11, "2014-09-11"),
+        (14, "2023-08-03"), (14, "2023-08-04"), (14, "2023-08-07"),
+        (14, "2023-08-08"), (14, "2023-08-09"), (14, "2023-08-10"),
+    )

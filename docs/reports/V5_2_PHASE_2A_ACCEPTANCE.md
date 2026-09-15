@@ -83,14 +83,14 @@ The bounded next step is to assemble and integrity-check the exact five-domain b
 ## Real-evidence root-cause audit
 
 `Phase2AEvidenceGapAuditV1` ID:
-`796990a6be6dc53133124cf33c0cdcb8def2aafff9d8041afab6a3cea9a3dd4e`.
+`71be1b92d59eafdf5ea91cd38bfa080ef8c8a01e2ac0f17b30c752d69119a321`.
 
-- `ASSEMBLER_LOOKUP_DEFECT = 12`
+- `ASSEMBLER_LOOKUP_DEFECT = 18`
 - `SCHEMA_MAPPING_DEFECT = 0`
 - `LINEAGE_ROLE_DEFECT = 0`
 - `INTERVAL_COVERAGE_DEFECT = 0`
-- `REAL_PHASE1_EVIDENCE_ABSENT = 10`
+- `REAL_PHASE1_EVIDENCE_ABSENT = 4`
 - `SAMPLE_APPLICABILITY_UNPROVEN = 0`
 - `OTHER_PROVEN_DEFECT = 0`
 
-The separate [22-slot evidence-gap matrix](V5_2_PHASE_2A_EVIDENCE_GAP_AUDIT.md) records every domain lookup, candidate artifact, exact lookup key and primary blocker. The mandatory five-slot pilot cannot run: all frozen suspension and corporate-action pilot candidates are among the ten pre-2024 slots whose approved materialized Daily Bar anchor/future facts are absent. A new assembler cannot lawfully manufacture those facts, so implementation stops fail closed before adding an adapter that could only demonstrate normal cases.
+The separate [22-slot evidence-gap matrix](V5_2_PHASE_2A_EVIDENCE_GAP_AUDIT.md) records every domain lookup, candidate artifact, exact lookup key and primary blocker. The reused 43-row frozen acquisition closes six of the ten Daily Bar gaps, including the proven full-day suspension case. Slots 9, 10, 11 and 14 retain 14 unexplained required sessions. A new assembler cannot lawfully manufacture those facts, so implementation stops fail closed.
