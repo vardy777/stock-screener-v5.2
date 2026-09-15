@@ -32,7 +32,7 @@ def derive_available_at(mode: AvailabilityMode, session: date, next_session: dat
 @dataclass(frozen=True, slots=True)
 class DatasetStateV1:
     dataset_kind: str
-    approval_id: str
+    approval_id: str | None
     manifest_id: str
     latest_approved_session: date
     completed_sessions: tuple[date, ...]

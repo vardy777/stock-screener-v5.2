@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from v5_2.data.real_audits.phase2a_evidence_gap import (
     BLOCKER_CLASSES,
     audit_phase2a_evidence_gaps,
@@ -8,6 +10,10 @@ from v5_2.data.real_audits.phase2a_evidence_gap import (
 
 
 ROOT = Path(__file__).resolve().parents[2]
+pytestmark = pytest.mark.skipif(
+    not (ROOT / "data/phase_2a/governance").is_dir(),
+    reason="repository-local governance artifacts are excluded from clean room",
+)
 
 
 def test_real_gap_audit_covers_frozen_inventory_without_vague_root_causes():

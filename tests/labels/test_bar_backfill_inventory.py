@@ -1,9 +1,15 @@
 from pathlib import Path
 
+import pytest
+
 from v5_2.data.real_audits.phase2a_bar_backfill import build_bar_backfill_inventory
 
 
 ROOT = Path(__file__).resolve().parents[2]
+pytestmark = pytest.mark.skipif(
+    not (ROOT / "data/phase_2a/governance").is_dir(),
+    reason="repository-local governance artifacts are excluded from clean room",
+)
 
 
 def test_backfill_inventory_contains_only_the_ten_frozen_real_evidence_gaps():

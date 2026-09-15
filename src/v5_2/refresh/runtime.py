@@ -396,20 +396,29 @@ def _load_published_state(state_root: Path, kind: str,
                           fallback: DatasetStateV1) -> DatasetStateV1:
     pointer = state_root / f"{kind}-current-state-id.txt"
     if not pointer.is_file():
-        return fallback
-    state_id = pointer.read_text(encoding="ascii").strip()
-    path = state_root / "governance" / f"{kind}-state-{state_id}.json"
-    value = json.loads(path.read_text(encoding="utf-8"))
-    claimed = value.pop("state_id", None)
-    if claimed != state_id or content_hash(value) != state_id:
-        raise RuntimeError("published refresh state integrity invalid")
-    value.pop("schema_version", None)
-    value["latest_approved_session"] = date.fromisoformat(value["latest_approved_session"])
-    value["completed_sessions"] = tuple(date.fromisoformat(item) for item in value["completed_sessions"])
-    value["readiness"] = DatasetReadiness(value["readiness"])
-    for name in ("reason_codes", "affected_security_ids", "availability_modes"):
-        value[name] = tuple(value[name])
-    return DatasetStateV1(**value)
+        state = fallback
+    else:
+        state_id = pointer.read_text(encoding="ascii").strip()
+        path = state_root / "governance" / f"{kind}-state-{state_id}.json"
+        value = json.loads(path.read_text(encoding="utf-8"))
+        claimed = value.pop("state_id", None)
+        if claimed != state_id or content_hash(value) != state_id:
+            raise RuntimeError("published refresh state integrity invalid")
+        value.pop("schema_version", None)
+        value["latest_approved_session"] = date.fromisoformat(value["latest_approved_session"])
+        value["completed_sessions"] = tuple(date.fromisoformat(item) for item in value["completed_sessions"])
+        value["readiness"] = DatasetReadiness(value["readiness"])
+        for name in ("reason_codes", "affected_security_ids", "availability_modes"):
+            value[name] = tuple(value[name])
+        state = DatasetStateV1(**value)
+    remediation = state_root.parent / "phase_1c_lineage_remediation"
+    if kind == "daily_bar" and (remediation / "daily_bar-current-composite-id.txt").is_file():
+        from dataclasses import replace
+        from v5_2.refresh.daily_bar_composite import resolve_phase1c_daily_bar_composite
+        state = replace(state, approval_id=None,
+                        manifest_id=resolve_phase1c_daily_bar_composite(remediation),
+                        availability_modes=("HISTORICAL_RECONSTRUCTED", "CONTEMPORANEOUS_OBSERVED"))
+    return state
 
 
 IncrementalExecutor = Callable[
