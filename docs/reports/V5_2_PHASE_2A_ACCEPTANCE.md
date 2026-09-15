@@ -79,3 +79,18 @@ The frozen 22-slot candidate inventory is preserved. Four slots have relevant st
 Consequently the independent ledger contains `MATCH=0`, `MISMATCH=0`, and `EVIDENCE_UNAVAILABLE=22`. This is evidence insufficiency, not a confirmed calculation defect. Phase 2A remains `PENDING`, publication remains forbidden, and Phase 2B must not start.
 
 The bounded next step is to assemble and integrity-check the exact five-domain bundle for every already-frozen slot, execute the production reference engine, calculate the same labels independently from separately pinned inputs, and compare the results. The inventory, thresholds, label semantics, and acceptance rules must not be changed to obtain a pass.
+
+## Real-evidence root-cause audit
+
+`Phase2AEvidenceGapAuditV1` ID:
+`796990a6be6dc53133124cf33c0cdcb8def2aafff9d8041afab6a3cea9a3dd4e`.
+
+- `ASSEMBLER_LOOKUP_DEFECT = 12`
+- `SCHEMA_MAPPING_DEFECT = 0`
+- `LINEAGE_ROLE_DEFECT = 0`
+- `INTERVAL_COVERAGE_DEFECT = 0`
+- `REAL_PHASE1_EVIDENCE_ABSENT = 10`
+- `SAMPLE_APPLICABILITY_UNPROVEN = 0`
+- `OTHER_PROVEN_DEFECT = 0`
+
+The separate [22-slot evidence-gap matrix](V5_2_PHASE_2A_EVIDENCE_GAP_AUDIT.md) records every domain lookup, candidate artifact, exact lookup key and primary blocker. The mandatory five-slot pilot cannot run: all frozen suspension and corporate-action pilot candidates are among the ten pre-2024 slots whose approved materialized Daily Bar anchor/future facts are absent. A new assembler cannot lawfully manufacture those facts, so implementation stops fail closed before adding an adapter that could only demonstrate normal cases.
