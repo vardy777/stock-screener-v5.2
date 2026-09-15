@@ -1,10 +1,12 @@
 from copy import deepcopy
+from dataclasses import asdict
 from datetime import date
 
 import pytest
 
 from v5_2.data.identity import content_hash
 from v5_2.data.identity import canonical_json
+from v5_2.data.daily_bar_lineage import DailyBarSourceBindingV1
 from v5_2.refresh.daily_bar_composite import (
     CompositeLineageError,
     Phase1CDailyBarComponentV1,
@@ -16,24 +18,29 @@ from v5_2.refresh.contracts import DatasetReadiness
 from v5_2.refresh.runtime import _load_published_state
 
 
-SEMANTIC = "semantic-v1"
-
-
 def artifact(schema, id_name, **values):
     digest = content_hash({"schema_version": schema, **values})
     return {"schema_version": schema, id_name: digest, "content_hash": digest, **values}
 
 
-def component(role, start, end, mode, member, *, revoked=()):
-    binding = artifact(
-        "DailyBarSourceBindingV1", "binding_id",
-        source_semantic_identity=SEMANTIC,
-        source_content_set_identity=content_hash((member,)),
-    )
+def source_binding(member, mode):
+    return asdict(DailyBarSourceBindingV1.create(
+        source_name="provider", dataset_kind="daily_bar", endpoint="daily",
+        payload_hashes=(member,),
+        source_semantic_contract_version="daily-bar-semantic-contract-v2",
+        requested_fields=("ts_code", "trade_date", "open", "high", "low", "close", "vol", "amount"),
+        normalizer_version="normalizer-v1", identity_policy_version="identity-v1",
+        unit_policy_id="unit-v1",
+        availability_policy_version=f"daily-bar-availability-v1:{mode}",
+    ))
+
+
+def component(role, start, end, mode, member, *, revoked=(), binding_mode=None):
+    binding = source_binding(member, binding_mode or mode)
     availability = artifact(
         "Phase1CDailyBarAvailabilityEvidenceV1", "evidence_id",
         binding_id=binding["binding_id"],
-        source_semantic_identity=SEMANTIC,
+        source_semantic_identity=binding["source_semantic_identity"],
         source_content_set_identity=binding["source_content_set_identity"],
         availability_mode=mode,
         observed_at_digest=content_hash(("2026-09-14T22:35:07+08:00",)) if mode == "CONTEMPORANEOUS_OBSERVED" else None,
@@ -49,6 +56,7 @@ def component(role, start, end, mode, member, *, revoked=()):
         manifest_hash_placeholder=None,
         dataset_kind="daily_bar", approval_id=approval["approval_id"],
         availability_evidence_id=availability["evidence_id"],
+        availability_policy_version=binding["availability_policy_version"],
         source_content_set_identity=binding["source_content_set_identity"],
         coverage_start=start, coverage_end=end, row_count=1,
         fact_content_hashes=(member,),
@@ -70,12 +78,17 @@ def three():
     )
 
 
+def composite_from(items, expected_members=("baseline", "catchup", "current")):
+    return Phase1CDailyBarCompositeManifestV1.create(
+        historical_baseline=items[0], historical_catch_up=items[1],
+        contemporaneous_observed=items[2],
+        expected_membership_digest=content_hash(tuple(sorted(expected_members))),
+    )
+
+
 def test_composite_requires_exactly_three_typed_roles():
     baseline, catchup, current = three()
-    result = Phase1CDailyBarCompositeManifestV1.create(
-        historical_baseline=baseline, historical_catch_up=catchup,
-        contemporaneous_observed=current,
-    )
+    result = composite_from((baseline, catchup, current))
     assert result.component_roles == (
         "HISTORICAL_BASELINE", "HISTORICAL_CATCH_UP", "CONTEMPORANEOUS_OBSERVED")
 
@@ -100,10 +113,10 @@ def test_roles_reject_wrong_provenance_or_availability(role, provenance, availab
 def test_component_rejects_tampered_or_mismatched_chain(target):
     role = "HISTORICAL_CATCH_UP"
     member = "catchup"
-    binding = artifact("DailyBarSourceBindingV1", "binding_id", source_semantic_identity=SEMANTIC, source_content_set_identity=content_hash((member,)))
-    availability = artifact("Phase1CDailyBarAvailabilityEvidenceV1", "evidence_id", binding_id=binding["binding_id"], source_semantic_identity=SEMANTIC, source_content_set_identity=binding["source_content_set_identity"], availability_mode="NEXT_SESSION_SAFE", observed_at_digest=None)
+    binding = source_binding(member, "NEXT_SESSION_SAFE")
+    availability = artifact("Phase1CDailyBarAvailabilityEvidenceV1", "evidence_id", binding_id=binding["binding_id"], source_semantic_identity=binding["source_semantic_identity"], source_content_set_identity=binding["source_content_set_identity"], availability_mode="NEXT_SESSION_SAFE", observed_at_digest=None)
     approval = artifact("SourceApprovalArtifactV1", "approval_id", dataset_kind="daily_bar", decision="APPROVED_WITH_RULES", source_version_identity=binding["source_content_set_identity"], evidence_ids=(availability["evidence_id"],))
-    manifest = artifact("DatasetManifestV1", "dataset_id", manifest_hash_placeholder=None, dataset_kind="daily_bar", approval_id=approval["approval_id"], availability_evidence_id=availability["evidence_id"], source_content_set_identity=binding["source_content_set_identity"], coverage_start="2026-09-11", coverage_end="2026-09-11", row_count=1, fact_content_hashes=(member,))
+    manifest = artifact("DatasetManifestV1", "dataset_id", manifest_hash_placeholder=None, dataset_kind="daily_bar", approval_id=approval["approval_id"], availability_evidence_id=availability["evidence_id"], availability_policy_version=binding["availability_policy_version"], source_content_set_identity=binding["source_content_set_identity"], coverage_start="2026-09-11", coverage_end="2026-09-11", row_count=1, fact_content_hashes=(member,))
     manifest["manifest_hash"] = manifest["dataset_id"]
     values = {"manifest": manifest, "approval": approval, "availability": availability, "binding": binding}
     values[target] = deepcopy(values[target])
@@ -117,24 +130,42 @@ def test_superseded_component_approval_fails_closed():
         component("HISTORICAL_CATCH_UP", "2026-09-11", "2026-09-11", "NEXT_SESSION_SAFE", "catchup", revoked=("CURRENT",))
 
 
+def test_component_rejects_availability_evidence_that_conflicts_with_binding_policy():
+    with pytest.raises(CompositeLineageError, match="binding availability policy"):
+        component(
+            "CONTEMPORANEOUS_OBSERVED",
+            "2026-09-14",
+            "2026-09-14",
+            "CONTEMPORANEOUS_OBSERVED",
+            "current",
+            binding_mode="NEXT_SESSION_SAFE",
+        )
+
+
 def test_three_component_membership_is_pairwise_disjoint():
     baseline, _, current = three()
     overlapping = component("HISTORICAL_CATCH_UP", "2026-09-14", "2026-09-14", "NEXT_SESSION_SAFE", "current")
     with pytest.raises(CompositeLineageError, match="membership"):
-        Phase1CDailyBarCompositeManifestV1.create(historical_baseline=baseline, historical_catch_up=overlapping, contemporaneous_observed=current)
+        composite_from((baseline, overlapping, current))
 
 
 def test_union_and_total_must_equal_components():
     baseline, catchup, current = three()
-    value = Phase1CDailyBarCompositeManifestV1.create(historical_baseline=baseline, historical_catch_up=catchup, contemporaneous_observed=current)
+    value = composite_from((baseline, catchup, current))
     assert value.aggregate_row_count == 3
     assert value.unclassified_count == value.duplicate_membership_count == 0
+    assert value.expected_membership_digest == value.aggregate_membership_digest
+
+
+def test_composite_rejects_union_that_does_not_match_external_expected_membership():
+    with pytest.raises(CompositeLineageError, match="expected membership"):
+        composite_from(three(), expected_members=("baseline", "catchup", "missing"))
 
 
 def test_composite_replays_same_hash():
     args = three()
-    first = Phase1CDailyBarCompositeManifestV1.create(historical_baseline=args[0], historical_catch_up=args[1], contemporaneous_observed=args[2])
-    second = Phase1CDailyBarCompositeManifestV1.create(historical_baseline=args[0], historical_catch_up=args[1], contemporaneous_observed=args[2])
+    first = composite_from(args)
+    second = composite_from(args)
     assert first.composite_manifest_id == second.composite_manifest_id
 
 
@@ -155,9 +186,7 @@ def test_payload_scope_changes_content_not_semantic_identity():
 
 def test_phase1c_resolver_selects_verified_composite_without_aggregate_approval(tmp_path):
     baseline, catchup, current = three()
-    composite = Phase1CDailyBarCompositeManifestV1.create(
-        historical_baseline=baseline, historical_catch_up=catchup,
-        contemporaneous_observed=current)
+    composite = composite_from((baseline, catchup, current))
     governance = tmp_path / "governance"
     governance.mkdir()
     (governance / f"phase1c-daily-bar-composite-{composite.composite_manifest_id}.json").write_bytes(canonical_json(composite.as_dict()))
@@ -170,9 +199,7 @@ def test_phase1c_resolver_selects_verified_composite_without_aggregate_approval(
 
 def test_phase1c_resolver_rejects_tampered_composite(tmp_path):
     baseline, catchup, current = three()
-    value = Phase1CDailyBarCompositeManifestV1.create(
-        historical_baseline=baseline, historical_catch_up=catchup,
-        contemporaneous_observed=current).as_dict()
+    value = composite_from((baseline, catchup, current)).as_dict()
     value["aggregate_row_count"] = 999
     governance = tmp_path / "governance"
     governance.mkdir()
@@ -185,9 +212,7 @@ def test_phase1c_resolver_rejects_tampered_composite(tmp_path):
 
 def test_runtime_state_resolves_daily_bar_to_composite_without_aggregate_approval(tmp_path):
     baseline, catchup, current = three()
-    composite = Phase1CDailyBarCompositeManifestV1.create(
-        historical_baseline=baseline, historical_catch_up=catchup,
-        contemporaneous_observed=current)
+    composite = composite_from((baseline, catchup, current))
     remediation = tmp_path / "phase_1c_lineage_remediation"
     governance = remediation / "governance"
     governance.mkdir(parents=True)

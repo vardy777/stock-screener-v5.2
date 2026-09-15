@@ -10,13 +10,14 @@ from v5_2.data.daily_bar_lineage import (
 )
 
 
-def binding(payloads=("a", "b")):
+def binding(payloads=("a", "b"), *, availability_policy="availability-v1",
+            semantic_contract="daily-semantic-v1"):
     return DailyBarSourceBindingV1.create(
         source_name="provider", dataset_kind="daily_bar", endpoint="daily",
-        payload_hashes=payloads, source_semantic_contract_version="daily-semantic-v1",
+        payload_hashes=payloads, source_semantic_contract_version=semantic_contract,
         requested_fields=("ts_code", "trade_date", "open", "high", "low", "close", "vol", "amount"),
         normalizer_version="normalizer-v1", identity_policy_version="identity-v1",
-        unit_policy_id="unit-v1", availability_policy_version="availability-v1",
+        unit_policy_id="unit-v1", availability_policy_version=availability_policy,
     )
 
 
@@ -50,6 +51,20 @@ def test_daily_bar_content_set_identity_changes_when_payload_scope_expands():
 
 def test_daily_bar_semantic_identity_does_not_change_when_only_payload_scope_expands():
     assert binding(("a", "b")).source_semantic_identity == binding(("a", "b", "c")).source_semantic_identity
+
+
+def test_availability_policy_changes_binding_but_not_source_semantic_identity():
+    historical = binding(
+        availability_policy="daily-bar-availability-v1:NEXT_SESSION_SAFE",
+        semantic_contract="daily-bar-semantic-contract-v2",
+    )
+    observed = binding(
+        availability_policy="daily-bar-availability-v1:CONTEMPORANEOUS_OBSERVED",
+        semantic_contract="daily-bar-semantic-contract-v2",
+    )
+
+    assert historical.source_semantic_identity == observed.source_semantic_identity
+    assert historical.binding_id != observed.binding_id
 
 
 def test_historical_availability_evidence_binds_exact_content_set_identity():

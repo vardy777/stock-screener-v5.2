@@ -37,12 +37,12 @@ PINNED_DATASETS = {
         "manifest": "data/phase_1b_exit_remediation/governance/security-master-complete-manifest-{manifest_id}.json",
     },
     "daily_bar": {
-        "approval_id": "31d91fd99630e3b63b585ae598e7728fe1922454c3dbee276d0ffe9e7b24d79f",
-        "manifest_id": "118744559f5869bcbe75b402870524a18ec6f42e813764568bec6c7f070bf5ad",
-        "approval": "data/phase_1b_lineage_remediation/governance/daily_bar-approval-{approval_id}.json",
-        "manifest": "data/phase_1b_lineage_remediation/governance/daily_bar-manifest-{manifest_id}.json",
-        "binding": "data/phase_1b_lineage_remediation/governance/daily-bar-source-binding-cd5d2cce173f38a896167399740f0f0f1b550bdf5e37b5bdaaa10a689861b771.json",
-        "availability": "data/phase_1b_lineage_remediation/governance/daily-bar-availability-c52bcc200d4201dae909ee00a95b6a314b8648502cdb9b9ccadd3a6ab8522082.json",
+        "approval_id": "eaa2c254b85077ae8f988c393b133ba90f5443025d2cfdbe10523229f8f753f4",
+        "manifest_id": "cb79850fac1c28e7b1e8bd9991d65c26f61add832b2f5ed67c40c586a13fd8c6",
+        "approval": "data/phase_1c_lineage_remediation/governance/historical-baseline-approval-{approval_id}.json",
+        "manifest": "data/phase_1c_lineage_remediation/governance/historical-baseline-manifest-{manifest_id}.json",
+        "binding": "data/phase_1c_lineage_remediation/governance/historical-baseline-binding-176dba27d4cb6943e2434f1608668dc5bc756fa2e1357e18098927873032f3e8.json",
+        "availability": "data/phase_1c_lineage_remediation/governance/historical-baseline-availability-2bb3877daa164b5c09b617c9a44168d1a8035fae6e247ef4cb023d313070448e.json",
     },
     "daily_security_status": {
         "approval_id": "ac1c23dae38c32228bfc6639714976e6a01063b230ae3397ee45d9ac1d8afa07",

@@ -32,7 +32,10 @@ class DailyBarSourceBindingV1:
     def create(cls, **values) -> DailyBarSourceBindingV1:
         payloads = tuple(sorted(set(values.pop("payload_hashes"))))
         fields = tuple(sorted(set(values.pop("requested_fields"))))
-        semantic = {"schema_version": "DailyBarSourceSemanticIdentityV1", **values,
+        semantic_values = dict(values)
+        if semantic_values["source_semantic_contract_version"] == "daily-bar-semantic-contract-v2":
+            semantic_values.pop("availability_policy_version")
+        semantic = {"schema_version": "DailyBarSourceSemanticIdentityV1", **semantic_values,
                     "requested_fields": fields}
         semantic_id = content_hash(semantic)
         content_set_id = content_hash(payloads)

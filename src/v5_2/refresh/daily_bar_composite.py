@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 from typing import Mapping, Sequence
 
+from v5_2.data.daily_bar_lineage import DailyBarSourceBindingV1
 from v5_2.data.identity import content_hash
 
 
@@ -28,7 +29,16 @@ def _verify(value: Mapping[str, object], identifier: str) -> bool:
     body = {key: item for key, item in value.items() if key not in {identifier, "content_hash", "manifest_hash"}}
     digest = content_hash({"schema_version": schema, **{key: item for key, item in body.items() if key != "schema_version"}})
     expected = value.get(identifier)
-    return expected == digest and value.get("content_hash", expected) == expected and value.get("manifest_hash", expected) == expected
+    integrity = expected == digest and value.get("content_hash", expected) == expected and value.get("manifest_hash", expected) == expected
+    if identifier == "binding_id" and integrity:
+        try:
+            binding = DailyBarSourceBindingV1(**{
+                key: item for key, item in value.items() if key != "schema_version"
+            })
+        except (TypeError, ValueError):
+            return False
+        return binding.verify()
+    return integrity
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,6 +86,9 @@ class Phase1CDailyBarComponentV1:
         semantic = str(binding["source_semantic_identity"])
         content = str(binding["source_content_set_identity"])
         recorded_mode = availability.get("availability_mode")
+        expected_policy = f"daily-bar-availability-v1:{availability_mode}"
+        if binding.get("availability_policy_version") != expected_policy:
+            raise CompositeLineageError("binding availability policy conflicts with evidence")
         effective_mode_matches = recorded_mode == availability_mode or (
             availability_mode == "NEXT_SESSION_SAFE"
             and recorded_mode == "HISTORICAL_RECONSTRUCTED"
@@ -93,6 +106,8 @@ class Phase1CDailyBarComponentV1:
             and availability.get("source_semantic_identity") == semantic
             and availability.get("source_content_set_identity") == content
             and effective_mode_matches
+            and manifest.get("availability_policy_version")
+                == binding.get("availability_policy_version")
             and manifest.get("source_content_set_identity", content) == content
             and approval_pins_availability
         ):
@@ -123,6 +138,7 @@ class Phase1CDailyBarCompositeManifestV1:
     historical_catch_up: Phase1CDailyBarComponentV1
     contemporaneous_observed: Phase1CDailyBarComponentV1
     aggregate_row_count: int
+    expected_membership_digest: str
     aggregate_membership_digest: str
     unclassified_count: int
     duplicate_membership_count: int
@@ -134,6 +150,7 @@ class Phase1CDailyBarCompositeManifestV1:
         cls, *, historical_baseline: Phase1CDailyBarComponentV1,
         historical_catch_up: Phase1CDailyBarComponentV1,
         contemporaneous_observed: Phase1CDailyBarComponentV1,
+        expected_membership_digest: str,
     ) -> Phase1CDailyBarCompositeManifestV1:
         components = (historical_baseline, historical_catch_up, contemporaneous_observed)
         expected = tuple(_ROLE_RULES)
@@ -144,7 +161,10 @@ class Phase1CDailyBarCompositeManifestV1:
         if duplicates:
             raise CompositeLineageError("component membership is not pairwise disjoint")
         row_count = sum(item.row_count for item in components)
-        membership_digest = content_hash(tuple((item.role, item.membership_digest, item.row_count) for item in components))
+        union_members = tuple(sorted(set().union(*memberships)))
+        membership_digest = content_hash(union_members)
+        if membership_digest != expected_membership_digest:
+            raise CompositeLineageError("component union does not match expected membership")
         body = {
             "schema_version": "Phase1CDailyBarCompositeManifestV1",
             "contract_version": "phase-1c-daily-bar-composite-v1",
@@ -153,13 +173,15 @@ class Phase1CDailyBarCompositeManifestV1:
             "historical_catch_up": historical_catch_up.as_dict(),
             "contemporaneous_observed": contemporaneous_observed.as_dict(),
             "aggregate_row_count": row_count,
+            "expected_membership_digest": expected_membership_digest,
             "aggregate_membership_digest": membership_digest,
             "unclassified_count": 0,
             "duplicate_membership_count": duplicates,
         }
         digest = content_hash(body)
         return cls(historical_baseline, historical_catch_up, contemporaneous_observed,
-                   row_count, membership_digest, 0, duplicates, digest, digest)
+                   row_count, expected_membership_digest, membership_digest,
+                   0, duplicates, digest, digest)
 
     @property
     def component_roles(self) -> tuple[str, str, str]:
@@ -176,6 +198,7 @@ class Phase1CDailyBarCompositeManifestV1:
             "historical_catch_up": self.historical_catch_up.as_dict(),
             "contemporaneous_observed": self.contemporaneous_observed.as_dict(),
             "aggregate_row_count": self.aggregate_row_count,
+            "expected_membership_digest": self.expected_membership_digest,
             "aggregate_membership_digest": self.aggregate_membership_digest,
             "unclassified_count": self.unclassified_count,
             "duplicate_membership_count": self.duplicate_membership_count,
