@@ -96,6 +96,12 @@ def audit_phase2a_evidence_gaps(root: Path) -> Phase2AEvidenceGapAuditV1:
     master_path = governance / MASTER_BUNDLE
     extension_path = root / "data/phase_1b1_2026_extension/governance" / CALENDAR_EXTENSION
     ca_path = root / "data/phase_1b2c/approved" / CA_FACTS
+    root_cause_paths = sorted((root / "data/phase_2a/governance").glob("remaining-bar-root-cause-audit-*.json"))
+    expected_absences: set[tuple[str, str]] = set()
+    if root_cause_paths:
+        for item in _load(root_cause_paths[-1])["entries"]:
+            if item["classification"] == "PROVEN_EXPECTED_ABSENCE":
+                expected_absences.add((item["security_identity"], item["session"]))
     calendar = _load(calendar_path)
     extension = _load(extension_path)
     master = set(_load(master_path)["ordered_security_identities"])
@@ -129,15 +135,21 @@ def audit_phase2a_evidence_gaps(root: Path) -> Phase2AEvidenceGapAuditV1:
                 bars[identity].add(fact["session"])
                 bar_paths[identity].add(path.relative_to(root).as_posix())
 
-    status_dir = root / "data/phase_1b2a/facts/daily_security_status"
+    status_dirs = (
+        root / "data/phase_1b2a/facts/daily_security_status",
+        root / "data/phase_1b2a_status_closure/facts/daily_security_status",
+    )
     statuses: dict[str, set[str]] = {identity: set() for identity in identities}
     status_paths: dict[str, set[str]] = {identity: set() for identity in identities}
-    for path in status_dir.glob("*.json"):
-        fact = _load(path)
-        identity = fact["security_identity"]
-        if identity in statuses:
-            statuses[identity].add(fact["session"])
-            status_paths[identity].add(path.relative_to(root).as_posix())
+    status_facts = []
+    for status_dir in status_dirs:
+        for path in status_dir.glob("*.json"):
+            fact = _load(path)
+            status_facts.append((path, fact))
+            identity = fact["security_identity"]
+            if identity in statuses:
+                statuses[identity].add(fact["session"])
+                status_paths[identity].add(path.relative_to(root).as_posix())
 
     entries = []
     for slot in inventory["slots"]:
@@ -148,16 +160,22 @@ def audit_phase2a_evidence_gaps(root: Path) -> Phase2AEvidenceGapAuditV1:
         bar_identities = (identity, "302132.SZ") if number == 15 else (identity,)
         present_bars = set().union(*(bars[value] for value in bar_identities))
         anchor_found = anchor in present_bars
+        anchor_suspended = anchor in statuses[identity] and any(
+            fact.get("is_suspended") is True
+            for _, fact in status_facts
+            if fact.get("security_identity") == identity and fact.get("session") == anchor
+        )
         suspended_future = {day for day in future if day in statuses[identity] and any(
-            _load(path).get("is_suspended") is True
-            for path in (root / "data/phase_1b2a/facts/daily_security_status").glob("*.json")
-            if _load(path).get("security_identity") == identity and _load(path).get("session") == day
+            fact.get("is_suspended") is True
+            for _, fact in status_facts
+            if fact.get("security_identity") == identity and fact.get("session") == day
         )}
-        required_future = tuple(day for day in future if day not in suspended_future)
+        proven_future_absence = {day for day in future if (identity, day) in expected_absences}
+        required_future = tuple(day for day in future if day not in suspended_future | proven_future_absence)
         future_found = sum(day in present_bars for day in required_future)
         status_found = sum(day in statuses[identity] for day in (anchor, *future))
         old_bar_scope = number in {6, 7, 8, 9, 10, 11, 12, 13, 14, 17}
-        bar_complete = anchor_found and future_found == len(required_future)
+        bar_complete = (anchor_found or anchor_suspended) and future_found == len(required_future)
         old_bar_gap = old_bar_scope and not bar_complete
         blocker = "REAL_PHASE1_EVIDENCE_ABSENT" if old_bar_gap else "ASSEMBLER_LOOKUP_DEFECT"
         missing = "daily_bar" if old_bar_gap else "LabelInputBundleV1 assembler"
@@ -178,7 +196,8 @@ def audit_phase2a_evidence_gaps(root: Path) -> Phase2AEvidenceGapAuditV1:
             slot=number, stratum=slot["stratum"], canonical_identity=identity,
             anchor_session=anchor, calendar_status="APPROVED_OPEN_SESSION_WINDOW_FOUND" if len(future) == 5 else "FUTURE_WINDOW_INCOMPLETE",
             master_status="IDENTITY_IN_COMPLETE_MASTER" if identity in master else "IDENTITY_SUPPLEMENT_REQUIRED",
-            daily_bar_status=("D_AND_REQUIRED_WINDOW_FOUND_WITH_PROVEN_ABSENCE" if bar_complete and suspended_future else
+            daily_bar_status=("ANCHOR_SUSPENDED_NOT_LABEL_SAFE" if anchor_suspended else
+                              "D_AND_REQUIRED_WINDOW_FOUND_WITH_PROVEN_ABSENCE" if bar_complete and (suspended_future or proven_future_absence) else
                               "D_AND_REQUIRED_WINDOW_FOUND" if bar_complete else
                               "ANCHOR_AND_REQUIRED_WINDOW_ABSENT" if not anchor_found and future_found == 0 else
                               f"PARTIAL_{int(anchor_found)}_PLUS_{future_found}_OF_{len(required_future)}"),
@@ -186,7 +205,8 @@ def audit_phase2a_evidence_gaps(root: Path) -> Phase2AEvidenceGapAuditV1:
                                     "PARTIAL_SPECIAL_EVENT_FACTS_FOUND" if status_found else
                                     "PANEL_EXISTS_EXACT_DAILY_FACTS_NOT_MATERIALIZED"),
             corporate_action_status="INTERVAL_ACTION_FACTS_FOUND" if relevant_ca else "NO_EVENT_REQUIRES_COVERAGE_PROOF",
-            anchor_reference_bar_status="FOUND" if anchor_found else "ABSENT",
+            anchor_reference_bar_status=("FOUND" if anchor_found else
+                                         "PROVEN_FULL_DAY_SUSPENSION" if anchor_suspended else "ABSENT"),
             future_window_status="CALENDAR_EXTENSION_FOUND" if anchor >= "2025-12-31" and len(future) == 5 else
                                  "FIVE_EXCHANGE_SESSIONS_FOUND" if len(future) == 5 else "INCOMPLETE",
             eligibility_status="REQUIRES_DATED_UNIVERSE_RESOLUTION",
@@ -195,6 +215,7 @@ def audit_phase2a_evidence_gaps(root: Path) -> Phase2AEvidenceGapAuditV1:
             missing_artifact_type=missing,
             missing_artifact_id_or_lookup_key=f"{identity}:{anchor}:{future[-1] if future else 'NO_H5'}",
             lookup_location_checked=("data/phase_1b1/facts/daily_bar", "data/phase_1b2a/facts/daily_security_status",
+                                     "data/phase_1b2a_status_closure/facts/daily_security_status",
                                      "data/phase_1b2c/approved", "data/phase_1b_exit_remediation/governance",
                                      "data/phase_1b1_2026_extension/governance", "data/phase_2a/bar_backfill/approved"),
             candidate_artifacts_found=tuple(sorted(candidates)), bundle_constructible=False,
