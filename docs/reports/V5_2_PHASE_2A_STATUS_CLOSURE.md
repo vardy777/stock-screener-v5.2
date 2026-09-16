@@ -6,14 +6,14 @@ Starting HEAD: `2e4015a57fdcaa9d1d9a556c6b6fbc11b6ebe84a`
 
 ## Immutable evidence result
 
-- Status Closure Audit ID: `9c4d775fa8e1945e46d019ccb5f3b5e57e67dee9e531511f90299a7b3a8d3294`
+- Status Closure Audit ID: `7c62a4084090f4f672d69dc27fd8b04cd06f6369680c04b9d1b479e71683e25f`
 - Existing approved Status evidence reused: `9 sessions / 5 payloads / 5 receipts`
 - New Status provider requests: `0`
 - Daily Bar provider requests: `0`
 - Source approval reused: `60d31609f590cf08f54ff682d5c4de5a987cdb670b13fe33eeb2466389d39edc`
 - PIT evidence reused: `aabfbcd3e8d4d03ff400c52a12ff005638b259bf0185e802d96372b4015f3f8f`
 - New formal Phase 1 Status facts: `9`
-- Supplement DatasetManifest: `248be2bf509d3e5474db98edfa09a0a2d1f4c9581fcbf55bca51450e70c8529c`
+- Supplement DatasetManifest: `fef0f11d8f23f59ef70759da20b8dedbce70331c48c1cf9c61468a202e22e46d`
 
 All nine sessions are exact `suspend-d` rows with `suspend_type=S` and `suspend_timing=null`. Each raw payload and acquisition receipt passes content-hash verification and is already pinned by the existing approved Status manifest. `StatusAvailabilityPolicyV2` maps every full-day suspension to the historical D-close cutoff at `16:30 Asia/Shanghai`; acquisition time is ignored.
 
@@ -29,11 +29,11 @@ All nine sessions are exact `suspend-d` rows with `suspend_type=S` and `suspend_
 | 300131.SZ | 2014-09-11 | FULL_DAY_SUSPENSION / ANCHOR NOT_LABEL_SAFE | `d4ff7f80dcbdb25335a1c1ab927d679e0f38d79a52bfdf91bc74609ba69e1134` | `d8070be38df11bc6bd5ebf71ef88c370dde95e19a66e2d3d6c3b36ab054f8e87` |
 | 002118.SZ | 2023-08-03 | FULL_DAY_SUSPENSION; not final tradable day | `d3c0fdaa5698e0d6289c1787437ade6132e87eee77a6f7942e4ab9a2ba8bfeb1` | `5b1557cc8b04e3dfdbef6a6ff56c1145797accf2addcfe9d4fe22f233c4611f0` |
 
-The supplement is stored in an isolated Phase 1 namespace so it does not mutate the frozen Phase 1B-2A fact collection or change the Checkpoint 3 backfill inventory identity. Old Status artifacts remain unchanged.
+The supplement is stored in an isolated Phase 1 namespace so it does not mutate the frozen Phase 1B-2A fact collection or change the Checkpoint 3 backfill inventory identity. Old Status artifacts remain unchanged. For `002118.SZ`, the approved Daily Bar payload ends on 2023-06-15 and exact full-day suspension observations cover every SZSE open session from 2023-06-16 through 2023-08-03; the immutable delisting boundary is 2023-08-04. The actual final trading session is therefore 2023-06-15.
 
 ## Recomputed frozen 22-slot audit
 
-Evidence Gap Audit ID: `24b1adb13f5949e6852ad23bba7882b03a592cbdea7a854c267ed8527ad6235a`
+Evidence Gap Audit ID: `5547490f765385651c973590ac2e58bb152e5403462d35bb9195037956e6deb9`
 
 ```text
 ASSEMBLER_LOOKUP_DEFECT = 22
@@ -50,10 +50,10 @@ BUNDLES CREATED = 0
 
 ```text
 focused Status closure / evidence-gap / root-cause / PIT tests
-20 passed in 20.66s
+20 passed in 22.84s
 
 full repository suite
-645 passed in 118.75s
+645 passed in 119.42s
 
 standalone / zero-project-dependency boundary
 PASS forbidden imports: 0
@@ -63,10 +63,10 @@ PASS phase 1a architecture boundary violations: 0
 
 clean-room / build / wheel install / wheel smoke
 build=true; install=true; wheel_smoke=true; zero_dependency_acceptance=true
-580 passed, 65 skipped in 2.83s
+580 passed, 65 skipped in 2.74s
 
 credential sentinel scan
-2 passed, 6 deselected in 68.98s
+2 passed, 6 deselected in 68.36s
 
 Status publication + evidence-gap deterministic replay
 DETERMINISTIC_REPLAY=True

@@ -26,6 +26,8 @@ def test_existing_approved_status_evidence_proves_all_nine_sessions() -> None:
     assert all(entry.disposition == "FULL_DAY_SUSPENSION" for entry in audit.entries)
     assert all(entry.raw_hash_pinned and entry.receipt_hash_pinned for entry in audit.entries)
     assert audit.provider_request_count == 0
+    assert audit.final_trading_session == date(2023, 6, 15)
+    assert audit.delisting_effective_session == date(2023, 8, 4)
     assert audit.verify()
 
 

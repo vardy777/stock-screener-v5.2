@@ -51,6 +51,9 @@ class StatusClosureAuditV1:
     source_manifest_id: str
     pit_evidence_id: str
     provider_request_count: int
+    final_trading_session: date
+    delisting_effective_session: date
+    final_trading_boundary_evidence_ids: tuple[str, ...]
     audit_id: str
     content_hash: str
 
@@ -61,6 +64,9 @@ class StatusClosureAuditV1:
             "source_manifest_id": self.source_manifest_id,
             "pit_evidence_id": self.pit_evidence_id,
             "provider_request_count": self.provider_request_count,
+            "final_trading_session": self.final_trading_session,
+            "delisting_effective_session": self.delisting_effective_session,
+            "final_trading_boundary_evidence_ids": self.final_trading_boundary_evidence_ids,
         }
         digest = content_hash({"schema_version": type(self).__name__, **body})
         return self.audit_id == self.content_hash == digest
@@ -116,6 +122,7 @@ def audit_existing_status_evidence(repository_root: Path, raw_runtime: Path) -> 
     pinned_receipts = set(manifest["receipt_hashes"])
     wanted = {(identity, session.strftime("%Y%m%d")) for identity, session in FROZEN_STATUS_SESSIONS}
     found: dict[tuple[str, str], StatusClosureEntryV1] = {}
+    delisting_suspension_dates: set[date] = set()
     store = RawArtifactStore(raw_runtime)
     raw_base = raw_runtime / "raw/datahubco_tushare_proxy/suspension_history"
     for path in sorted(raw_base.rglob("*.json")):
@@ -127,6 +134,11 @@ def audit_existing_status_evidence(repository_root: Path, raw_runtime: Path) -> 
             continue
         matching = [row for row in artifact.provider_payload["rows"]
                     if (str(row.get("ts_code")), str(row.get("trade_date"))) in wanted]
+        for row in artifact.provider_payload["rows"]:
+            if (str(row.get("ts_code")) == "002118.SZ" and row.get("suspend_type") == "S"
+                    and row.get("suspend_timing") in (None, "")):
+                value = str(row.get("trade_date"))
+                delisting_suspension_dates.add(date(int(value[:4]), int(value[4:6]), int(value[6:])))
         if not matching:
             continue
         receipt_paths = tuple((raw_runtime / "receipts" / artifact.payload_hash[:16]).glob("*.json"))
@@ -159,9 +171,33 @@ def audit_existing_status_evidence(repository_root: Path, raw_runtime: Path) -> 
                     if (identity, session.strftime("%Y%m%d")) in found)
     if len(ordered) != 9 or any(not item.raw_hash_pinned or not item.receipt_hash_pinned for item in ordered):
         raise RuntimeError("required status raw is missing or tampered")
+    calendar = _load(repository_root / "data/phase_1b_exit_remediation/governance/"
+                     "historical-calendar-fact-bundle-d64a2ef0823e9a55a33d3b8111337fb71fcb43ce778235694ebfadfed1396dcc.json")
+    required_suspension_dates = {
+        date(int(row["cal_date"][:4]), int(row["cal_date"][4:6]), int(row["cal_date"][6:]))
+        for row in calendar["ordered_rows"] if row["exchange"] == "SZSE" and row["is_open"] == 1
+        and "20230616" <= row["cal_date"] <= "20230803"
+    }
+    if not required_suspension_dates or not required_suspension_dates <= delisting_suspension_dates:
+        raise RuntimeError("002118 final-trading suspension chain is incomplete")
+    daily_hash = "801a5179a86c0415e23d9764716bc77b3bca2087907a9c5a282c05fad1a2356a"
+    daily_paths = tuple((raw_runtime.parent / "phase_1b1/raw/datahubco_tushare_proxy/daily_bar").rglob(f"{daily_hash}.json"))
+    if len(daily_paths) != 1:
+        raise RuntimeError("002118 approved Daily Bar boundary evidence is missing")
+    daily = RawArtifactStore(raw_runtime.parent / "phase_1b1").read_payload(daily_paths[0])
+    sessions = sorted(str(row["trade_date"]) for row in daily.provider_payload["rows"]
+                      if row.get("ts_code") == "002118.SZ")
+    if not sessions or sessions[-1] != "20230615":
+        raise RuntimeError("002118 final trading session is not proven")
     body = {"entries": ordered, "source_approval_id": APPROVAL_ID,
             "source_manifest_id": MANIFEST_ID, "pit_evidence_id": PIT_ID,
-            "provider_request_count": 0}
+            "provider_request_count": 0,
+            "final_trading_session": date(2023, 6, 15),
+            "delisting_effective_session": date(2023, 8, 4),
+            "final_trading_boundary_evidence_ids": (
+                daily_hash, "bf95765f9514415d1e65ea4564a894eb4b1bb6c2945b91d6ec2d41d2a4c6d03f",
+                *tuple(sorted({item.payload_hash for item in ordered if item.security_identity == "002118.SZ"})),
+            )}
     digest = content_hash({"schema_version": "StatusClosureAuditV1", **body})
     return StatusClosureAuditV1(**body, audit_id=digest, content_hash=digest)
 
