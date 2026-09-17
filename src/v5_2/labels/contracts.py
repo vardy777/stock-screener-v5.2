@@ -195,7 +195,7 @@ class LabelInputBundleV1:
     canonical_security_identity: str
     anchor_session: date
     anchor_boundary: AnchorKnowledgeBoundary
-    reference_price: LabelReferencePrice
+    reference_price: LabelReferencePrice | None
     provenance_path: ProvenancePath
     domain_lineage: tuple[DomainLineageV1, ...]
     anchor_snapshot_id: str | None
@@ -212,7 +212,7 @@ class LabelInputBundleV1:
 
     @classmethod
     def create(cls, *, canonical_security_identity: str, anchor_session: date,
-               anchor_boundary: AnchorKnowledgeBoundary, reference_price: LabelReferencePrice,
+               anchor_boundary: AnchorKnowledgeBoundary, reference_price: LabelReferencePrice | None,
                provenance_path: ProvenancePath, domain_lineage: tuple[DomainLineageV1, ...],
                anchor_snapshot_id: str | None = None, outcome_snapshot_id: str | None = None,
                approved_exchange_sessions: tuple[date, ...] = (), latest_completed_session: date | None = None,
@@ -220,7 +220,7 @@ class LabelInputBundleV1:
                corporate_actions: tuple[object, ...] = (), action_coverage: object | None = None,
                dated_identity_map: tuple[tuple[date, str, str], ...] = (), delisting_session: date | None = None):
         provenance_path = ProvenancePath(provenance_path)
-        if anchor_boundary.anchor_session != anchor_session or reference_price.session != anchor_session: raise ValueError("anchor session mismatch")
+        if anchor_boundary.anchor_session != anchor_session or (reference_price is not None and reference_price.session != anchor_session): raise ValueError("anchor session mismatch")
         if tuple(item.domain for item in domain_lineage) != REQUIRED_LABEL_DOMAINS: raise ValueError("exact ordered five-domain lineage required")
         if not all(item.verify() for item in domain_lineage): raise ValueError("invalid domain lineage")
         if provenance_path is ProvenancePath.CONTEMPORANEOUS and (anchor_snapshot_id is None or outcome_snapshot_id is None): raise ValueError("contemporaneous snapshots required")
@@ -239,7 +239,8 @@ class LabelInputBundleV1:
 
     def verify(self) -> bool:
         body = {name: getattr(self, name) for name in ("canonical_security_identity", "anchor_session", "anchor_boundary", "reference_price", "provenance_path", "domain_lineage", "anchor_snapshot_id", "outcome_snapshot_id", "approved_exchange_sessions", "latest_completed_session", "future_bars", "future_statuses", "corporate_actions", "action_coverage", "dated_identity_map", "delisting_session")}
-        return self.anchor_boundary.verify() and self.reference_price.verify() and all(x.verify() for x in self.domain_lineage) and self.content_hash == _hash_body(type(self).__name__, body)
+        reference_valid = self.reference_price is None or self.reference_price.verify()
+        return self.anchor_boundary.verify() and reference_valid and all(x.verify() for x in self.domain_lineage) and self.content_hash == _hash_body(type(self).__name__, body)
 
 
 @dataclass(frozen=True, slots=True)

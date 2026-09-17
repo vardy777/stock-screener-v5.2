@@ -85,7 +85,8 @@ def _coverage_guard(coverage: CorporateActionCoverageV1) -> None:
 
 def build_economic_wealth_path(reference_price: LabelReferencePrice, sessions: tuple[date, ...],
                                bars: tuple[DailyBarFactV1, ...], actions: tuple[CorporateActionFactV1, ...],
-                               action_coverage: CorporateActionCoverageV1) -> EconomicWealthPathV1:
+                               action_coverage: CorporateActionCoverageV1,
+                               suspended_sessions: tuple[date, ...] = ()) -> EconomicWealthPathV1:
     _coverage_guard(action_coverage)
     supported = {ActionType.CASH_DIVIDEND, ActionType.BONUS_SHARE}
     relevant = tuple(item for item in actions if (item.effective_date or item.ex_date) in sessions and not item.is_cancelled)
@@ -106,6 +107,13 @@ def build_economic_wealth_path(reference_price: LabelReferencePrice, sessions: t
                 shares *= Decimal("1") + (item.share_ratio or Decimal("0"))
             used.append(item.fact_id)
         bar = by_day.get(session)
+        if bar is None and session in suspended_sessions:
+            prior_close = points[-1].close_wealth if points else cash + shares * reference_price.price
+            points.append(EconomicPathPointV1(
+                session, shares, cash, None, None, None, prior_close, False,
+                tuple(item.fact_id for item in todays),
+            ))
+            continue
         if bar is None or not bar.verify() or bar.price_basis != "UNADJUSTED_RAW":
             raise UnsafeLabelInput(LabelReasonCode.EXPECTED_BAR_MISSING, session)
         used.append(bar.fact_id)

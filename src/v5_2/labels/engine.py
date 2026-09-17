@@ -83,6 +83,8 @@ class ReferenceLabelEngine:
             horizons = resolve_label_horizons(bundle.anchor_session, bundle.approved_exchange_sessions, bundle.latest_completed_session)
         except ValueError:
             return _state_values(bundle, LabelState.NOT_LABEL_SAFE, LabelReasonCode.INPUT_LINEAGE_INVALID)
+        if not any(horizons.completed):
+            return _state_values(bundle, LabelState.LABEL_PENDING, LabelReasonCode.HORIZON_NOT_COMPLETED)
         safe = validate_label_window(bundle, horizons)
         if isinstance(safe, UnsafeWindowV1):
             values = []
@@ -93,9 +95,15 @@ class ReferenceLabelEngine:
                 else:
                     values.append(LabelValueV1.create(name, LabelState.NOT_LABEL_SAFE, None, safe.reason))
             return LabelResultV1.create(bundle.canonical_security_identity, bundle.anchor_session, tuple(values), bundle.content_hash)
+        if bundle.reference_price is None:
+            return _state_values(bundle, LabelState.NOT_LABEL_SAFE, LabelReasonCode.ANCHOR_BAR_MISSING)
         coverage = bundle.action_coverage if isinstance(bundle.action_coverage, CorporateActionCoverageV1) else CorporateActionCoverageV1.safe()
         try:
-            path = build_economic_wealth_path(bundle.reference_price, horizons.window_5d, tuple(bundle.future_bars), tuple(bundle.corporate_actions), coverage)
+            path = build_economic_wealth_path(
+                bundle.reference_price, horizons.window_5d, tuple(bundle.future_bars),
+                tuple(bundle.corporate_actions), coverage,
+                tuple(item.session for item in bundle.future_statuses if item.is_suspended),
+            )
             numeric = calculate_outcome_labels(path)
             barriers = (
                 calculate_barrier(path, Decimal(".03"), Decimal("-.02")),

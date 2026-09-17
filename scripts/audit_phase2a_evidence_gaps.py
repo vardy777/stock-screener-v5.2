@@ -22,7 +22,7 @@ def main() -> int:
     print(f"PHASE_2A_EVIDENCE_GAP_AUDIT_ID={audit.audit_id}")
     for name, count in audit.counts:
         print(f"{name}={count}")
-    print("BUNDLES_CONSTRUCTIBLE=0")
+    print(f"BUNDLES_CONSTRUCTIBLE={sum(entry.bundle_constructible for entry in audit.entries)}")
     return 0
 
 

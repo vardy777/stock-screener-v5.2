@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import date
 import json
 from pathlib import Path
@@ -88,7 +88,7 @@ def _matching_files(root: Path, pattern: str, location: Path) -> tuple[Path, ...
     return tuple(sorted(path.relative_to(root) if path.is_absolute() else path for path in paths))
 
 
-def audit_phase2a_evidence_gaps(root: Path) -> Phase2AEvidenceGapAuditV1:
+def audit_phase2a_evidence_gaps(root: Path, *, resolve_assembler: bool = True) -> Phase2AEvidenceGapAuditV1:
     inventory_path = root / "data/phase_2a/governance" / f"label-acceptance-inventory-{INVENTORY_ID}.json"
     inventory = _load(inventory_path)
     governance = root / "data/phase_1b_exit_remediation/governance"
@@ -221,9 +221,28 @@ def audit_phase2a_evidence_gaps(root: Path) -> Phase2AEvidenceGapAuditV1:
             candidate_artifacts_found=tuple(sorted(candidates)), bundle_constructible=False,
             blocker_class=blocker, blocker_reason=reason,
         ))
+    if resolve_assembler:
+        from v5_2.labels.acceptance import build_frozen_inventory
+        from v5_2.data.label_evidence_assembler import EvidenceAssemblyError, Phase2AEvidenceAssemblerV1
+        assembler = Phase2AEvidenceAssemblerV1(root)
+        slots = {item.slot: item for item in build_frozen_inventory().slots}
+        resolved = []
+        for entry in entries:
+            try:
+                assembler.assemble(slots[entry.slot])
+            except EvidenceAssemblyError as exc:
+                resolved.append(replace(entry, blocker_reason=str(exc)))
+            else:
+                resolved.append(replace(
+                    entry, bundle_constructible=True, blocker_class="",
+                    missing_artifact_type="NONE", blocker_reason="ASSEMBLED_FROM_EXACT_IMMUTABLE_PHASE1_LINEAGE",
+                ))
+        entries = resolved
     counts = tuple((name, sum(entry.blocker_class == name for entry in entries)) for name in BLOCKER_CLASSES)
     remaining = sum(entry.blocker_class == "REAL_PHASE1_EVIDENCE_ABSENT" for entry in entries)
-    common = f"No repository-facing evidence assembler exists; {remaining} frozen slots retain real approved Daily Bar evidence gaps after targeted backfill."
+    constructible = sum(entry.bundle_constructible for entry in entries)
+    common = (f"Evidence assembler resolves {constructible} of 22 frozen slots; "
+              f"{remaining} slots retain real approved Daily Bar evidence gaps.")
     body = {"inventory_id": INVENTORY_ID, "entries": tuple(entries), "counts": counts, "common_root_cause": common}
     digest = content_hash({"schema_version": "Phase2AEvidenceGapAuditV1", **body})
     return Phase2AEvidenceGapAuditV1(**body, audit_id=digest, content_hash=digest)
