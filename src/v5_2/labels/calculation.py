@@ -155,6 +155,16 @@ class BarrierCalculationV1:
     boolean_value: bool
 
 
+@dataclass(frozen=True, slots=True)
+class BarrierAmbiguityEvidenceV1:
+    """Preserves the observed ambiguity without inventing barrier order."""
+
+    outcome: None
+    first_decisive_session: date
+    boolean_value: None
+    ambiguous_session: date
+
+
 def calculate_barrier(path: EconomicWealthPathV1, upper_return: Decimal, lower_return: Decimal) -> BarrierCalculationV1:
     for point in path.points:
         if not point.intraday_trade:

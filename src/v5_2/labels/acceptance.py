@@ -169,6 +169,120 @@ def build_comparison_ledger(calculations: tuple[IndependentLabelCalculationV1, .
     return EngineComparisonLedgerV1(tuple(entries), digest, digest)
 
 
+@dataclass(frozen=True, slots=True)
+class FullComparisonEntryV1:
+    slot: int
+    security_identity: str
+    anchor_session: date
+    bundle_id: str
+    five_domain_lineage_ids: tuple[str, ...]
+    production_result_hash: str
+    independent_result_hash: str
+    production_summary: tuple[tuple[str, str, str, str], ...]
+    independent_summary: tuple[tuple[str, str, str, str], ...]
+    production_barriers: tuple[tuple[str, str, str], ...]
+    independent_barriers: tuple[tuple[str, str, str], ...]
+    numeric_match: bool
+    state_match: bool
+    reason_match: bool
+    barrier_categorical_match: bool
+    barrier_decisive_session_match: bool
+    lineage_validation: bool
+    disposition: str
+    comparison_hash: str
+    content_hash: str
+
+    def verify(self):
+        body = {name: getattr(self, name) for name in (
+            "slot", "security_identity", "anchor_session", "bundle_id",
+            "five_domain_lineage_ids", "production_result_hash",
+            "independent_result_hash", "production_summary", "independent_summary",
+            "production_barriers", "independent_barriers", "numeric_match",
+            "state_match", "reason_match", "barrier_categorical_match",
+            "barrier_decisive_session_match", "lineage_validation", "disposition",
+        )}
+        digest = content_hash({"schema_version": type(self).__name__, **body})
+        return self.comparison_hash == self.content_hash == digest
+
+
+def _public_summary(result):
+    return tuple((item.label_name, item.state.value, str(item.value),
+                  item.reason_code.value if item.reason_code else "") for item in result.values)
+
+
+def _production_barriers(result):
+    values = []
+    names = ("hit_3pct_before_-2pct", "hit_5pct_before_-3pct")
+    for name, item in zip(names, result.barrier_evidence):
+        outcome = item.outcome.value if getattr(item, "outcome", None) is not None else ""
+        decisive = item.first_decisive_session.isoformat() if getattr(item, "first_decisive_session", None) else ""
+        ambiguous = getattr(item, "ambiguous_session", None)
+        values.append((name, outcome or "AMBIGUOUS" if ambiguous else outcome,
+                       decisive or (ambiguous.isoformat() if ambiguous else "")))
+    return tuple(values)
+
+
+def _independent_barriers(result):
+    return tuple((item.label_name, item.outcome or ("AMBIGUOUS" if item.ambiguous_session else ""),
+                  item.decisive_session.isoformat() if item.decisive_session else "")
+                 for item in result.barriers)
+
+
+def build_full_comparison_entry(slot, bundle, production, independent) -> FullComparisonEntryV1:
+    produced = _public_summary(production)
+    expected = independent.result_summary
+    states = tuple(item[1] for item in produced) == tuple(item[1] for item in expected)
+    reasons = tuple(item[3] for item in produced) == tuple(item[3] for item in expected)
+    numeric = tuple(item[2] for item in produced) == tuple(item[2] for item in expected)
+    prod_barriers = _production_barriers(production)
+    independent_barriers = _independent_barriers(independent)
+    categorical = tuple(item[:2] for item in prod_barriers) == tuple(item[:2] for item in independent_barriers)
+    decisive = tuple((item[0], item[2]) for item in prod_barriers) == tuple((item[0], item[2]) for item in independent_barriers)
+    lineage = (bundle.verify() and production.verify() and independent.verify()
+               and production.bundle_hash == bundle.content_hash
+               and independent.bundle_id == bundle.content_hash
+               and independent.lineage_digest == content_hash(tuple(item.content_hash for item in bundle.domain_lineage)))
+    matched = all((numeric, states, reasons, categorical, decisive, lineage))
+    body = {
+        "slot": slot.slot, "security_identity": slot.security_identity,
+        "anchor_session": slot.anchor_session, "bundle_id": bundle.content_hash,
+        "five_domain_lineage_ids": tuple(item.content_hash for item in bundle.domain_lineage),
+        "production_result_hash": production.content_hash,
+        "independent_result_hash": independent.content_hash,
+        "production_summary": produced, "independent_summary": expected,
+        "production_barriers": prod_barriers, "independent_barriers": independent_barriers,
+        "numeric_match": numeric, "state_match": states, "reason_match": reasons,
+        "barrier_categorical_match": categorical,
+        "barrier_decisive_session_match": decisive,
+        "lineage_validation": lineage,
+        "disposition": "MATCH" if matched else "MISMATCH",
+    }
+    digest = content_hash({"schema_version": "FullComparisonEntryV1", **body})
+    return FullComparisonEntryV1(**body, comparison_hash=digest, content_hash=digest)
+
+
+@dataclass(frozen=True, slots=True)
+class FullComparisonLedgerV1:
+    entries: tuple[FullComparisonEntryV1, ...]
+    ledger_id: str
+    content_hash: str
+
+    @classmethod
+    def create(cls, *, entries: tuple[FullComparisonEntryV1, ...]):
+        if tuple(item.slot for item in entries) != tuple(range(1, 23)):
+            raise ValueError("exact 22 distinct ordered slots required")
+        if not all(item.verify() for item in entries):
+            raise ValueError("tampered comparison entry")
+        digest = content_hash({"schema_version": cls.__name__, "entries": entries})
+        return cls(entries, digest, digest)
+
+    def verify(self):
+        digest = content_hash({"schema_version": type(self).__name__, "entries": self.entries})
+        return (self.ledger_id == self.content_hash == digest
+                and tuple(item.slot for item in self.entries) == tuple(range(1, 23))
+                and all(item.verify() for item in self.entries))
+
+
 ACCEPTANCE_GATES = (
     "LABEL CONTRACT", "CAUSAL ISOLATION", "TRADING SESSION SEMANTICS",
     "RETURN SEMANTICS", "MFE/MAE SEMANTICS", "BARRIER SEMANTICS",

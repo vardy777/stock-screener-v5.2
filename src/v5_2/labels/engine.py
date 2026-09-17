@@ -5,7 +5,7 @@ from datetime import date
 from decimal import Decimal
 
 from v5_2.labels.calculation import (
-    CorporateActionCoverageV1, LabelHorizonsV1, UnsafeLabelInput,
+    BarrierAmbiguityEvidenceV1, CorporateActionCoverageV1, LabelHorizonsV1, UnsafeLabelInput,
     build_economic_wealth_path, calculate_barrier, calculate_outcome_labels,
     resolve_label_horizons,
 )
@@ -105,12 +105,26 @@ class ReferenceLabelEngine:
                 tuple(item.session for item in bundle.future_statuses if item.is_suspended),
             )
             numeric = calculate_outcome_labels(path)
-            barriers = (
-                calculate_barrier(path, Decimal(".03"), Decimal("-.02")),
-                calculate_barrier(path, Decimal(".05"), Decimal("-.03")),
-            )
         except UnsafeLabelInput as error:
             return _state_values(bundle, LabelState.NOT_LABEL_SAFE, error.reason)
+        barriers = []
+        ambiguity = False
+        for upper, lower in ((Decimal(".03"), Decimal("-.02")),
+                             (Decimal(".05"), Decimal("-.03"))):
+            try:
+                barriers.append(calculate_barrier(path, upper, lower))
+            except UnsafeLabelInput as error:
+                if error.reason is not LabelReasonCode.BARRIER_PATH_AMBIGUOUS or error.horizon is None:
+                    return _state_values(bundle, LabelState.NOT_LABEL_SAFE, error.reason)
+                ambiguity = True
+                barriers.append(BarrierAmbiguityEvidenceV1(None, error.horizon, None, error.horizon))
+        barriers = tuple(barriers)
+        if ambiguity:
+            result = _state_values(bundle, LabelState.NOT_LABEL_SAFE, LabelReasonCode.BARRIER_PATH_AMBIGUOUS)
+            return LabelResultV1.create(
+                bundle.canonical_security_identity, bundle.anchor_session,
+                result.values, bundle.content_hash, barriers,
+            )
         endpoints = {"return_1d": horizons.h1, "return_3d": horizons.h3, "return_5d": horizons.h5,
                      "max_favorable_excursion_5d": horizons.h5, "max_adverse_excursion_5d": horizons.h5,
                      "hit_3pct_before_-2pct": horizons.h5, "hit_5pct_before_-3pct": horizons.h5}
