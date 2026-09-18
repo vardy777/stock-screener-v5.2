@@ -10,6 +10,8 @@
 
 **Frozen specification:** `docs/superpowers/specs/2026-09-17-v5-2-phase-2a-acceptance-architecture-v2-design.md` at `f92f0a564c802ddc28dc71153be44d409b6858ee`.
 
+**Authorized provenance correction:** `CORRECTION TYPE = PROVENANCE_TYPO_CORRECTION`; `INCORRECT PLAN VALUE = 0ee799f9cfe30c29d43672245fccfc136338e930924f012469624026443c97247`; `AUTHORITATIVE VALUE = 0ee799a175a5e6832b9ca79d88ff9a0b9583ff92e204849274f96a031c397247`; `AUTHORITY = Checkpoint 7 immutable comparison ledger and V5_2_PHASE_2A_ACCEPTANCE.md`; `ARCHITECTURE CHANGED = NO`; `IMPLEMENTATION SEMANTICS CHANGED = NO`; `ACCEPTANCE CRITERIA CHANGED = NO`.
+
 ## Global Constraints
 
 - Work only on `phase2a-implementation`; never update `main`, open a PR, merge, rebase, or squash.
@@ -176,7 +178,7 @@ def build_real_reference_coverage_ledger(
 
 Safe reuse is limited to immutable Checkpoint 7 inputs and results whose IDs and hashes still verify: the 20 retained constructed bundles, their production results, independent results, field-level comparisons, and exact five-domain lineage. V2 must fresh-materialize the classification/migration records and `RealReferenceCoverageLedgerV2` wrapper because those artifacts did not exist under V1. It must not recompute market facts, rewrite the Checkpoint 7 comparison ledger, or infer V2 PASS merely because a V1 artifact exists. Slots whose registered strata were untruthful remain recorded in amendment provenance; the retained Layer A case description uses actual observed behavior only.
 
-- [ ] Write RED tests requiring exactly the 20 retained real slots, `REAL_MARKET_EVIDENCE`, exact five-domain lineage, comparison ledger ID `0ee799f9cfe30c29d43672245fccfc136338e930924f012469624026443c97247`, truthful barrier roles, and zero mismatch. Reject slots 16/17, synthetic evidence, incomplete lineage, revoked/superseded inputs, or a mismatch.
+- [ ] Write RED tests requiring exactly the 20 retained real slots, `REAL_MARKET_EVIDENCE`, exact five-domain lineage, comparison ledger ID `0ee799a175a5e6832b9ca79d88ff9a0b9583ff92e204849274f96a031c397247`, truthful barrier roles, and zero mismatch. Reject slots 16/17, synthetic evidence, incomplete lineage, revoked/superseded inputs, or a mismatch.
 - [ ] Run `python -m pytest tests/labels/test_acceptance_v2_layer_a.py -q`; expected RED.
 - [ ] Implement a pure builder that consumes already verified Checkpoint 7 artifacts; it does not rerun acquisition or silently manufacture missing barrier coverage.
 - [ ] Re-run; expected GREEN.
