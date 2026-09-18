@@ -290,12 +290,45 @@ class GateArtifactConsumptionMapV2:
 
     @classmethod
     def create(cls, *, amendment_id: str, entries: tuple[GateConsumptionV2, ...]):
+        from v5_2.labels.acceptance import ACCEPTANCE_GATES
+        if tuple(item.gate for item in entries) != ACCEPTANCE_GATES:
+            raise ValueError("exact 16 acceptance gates required")
+        if not all(item.verify() for item in entries):
+            raise ValueError("tampered gate consumption")
         body = {"amendment_id": amendment_id, "entries": entries}; digest = _digest(cls.__name__, body)
         return cls(**body, map_id=digest, content_hash=digest)
 
     def verify(self):
         body = {"amendment_id": self.amendment_id, "entries": self.entries}
         return self.map_id == self.content_hash == _digest(type(self).__name__, body) and all(x.verify() for x in self.entries)
+
+
+def build_gate_consumption_map(amendment: Phase2AAcceptanceArchitectureAmendmentV2, *, layer_a_id: str, layer_b_id: str, layer_c_id: str) -> GateArtifactConsumptionMapV2:
+    from v5_2.labels.acceptance import ACCEPTANCE_GATES
+    if not amendment.verify():
+        raise ValueError("invalid amendment")
+    specifications = (
+        ("A", (amendment.artifact_id, layer_a_id), "label_contract_verified"),
+        ("B", (layer_b_id,), "causal_isolation_verified"),
+        ("A", (layer_a_id,), "trading_sessions_match"),
+        ("A", (layer_a_id,), "returns_match"),
+        ("A", (layer_a_id,), "mfe_mae_match"),
+        ("C+A", (layer_c_id, layer_a_id), "barrier_edges_and_real_paths_match"),
+        ("A+B", (layer_a_id, layer_b_id), "supported_and_unsupported_ca_safe"),
+        ("A", (layer_a_id,), "suspension_paths_match"),
+        ("A", (layer_a_id,), "delisting_path_safe"),
+        ("A+B", (layer_a_id, layer_b_id), "identity_and_rejections_safe"),
+        ("B", (layer_b_id,), "missing_data_rejects_pre_engine"),
+        ("A", (layer_a_id,), "pending_state_matches"),
+        ("A", (layer_a_id,), "legal_bundle_unsafe_states_match"),
+        ("A", (layer_a_id,), "mandatory_real_reference_coverage"),
+        ("A+C", (layer_a_id, layer_c_id), "independent_comparisons_match"),
+        ("CROSS_LAYER", (amendment.artifact_id, layer_a_id, layer_b_id, layer_c_id), "byte_identical_replay"),
+    )
+    entries = tuple(GateConsumptionV2.create(
+        gate=gate, primary_layer=layer, artifact_ids=ids, predicate=predicate,
+    ) for gate, (layer, ids, predicate) in zip(ACCEPTANCE_GATES, specifications))
+    return GateArtifactConsumptionMapV2.create(amendment_id=amendment.artifact_id, entries=entries)
 
 
 @dataclass(frozen=True, slots=True)
