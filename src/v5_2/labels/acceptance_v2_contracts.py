@@ -19,7 +19,7 @@ def _digest(schema: str, body: dict[str, object]) -> str:
 
 
 def _ids(values: tuple[str, ...], name: str) -> None:
-    if not values or len(set(values)) != len(values) or any(len(value) != 64 for value in values):
+    if not values or len(set(values)) != len(values) or any(len(value) not in {40, 64} for value in values):
         raise ValueError(f"invalid {name}")
 
 
@@ -63,6 +63,35 @@ class Phase2AAcceptanceArchitectureAmendmentV2:
     def verify(self) -> bool:
         body = {"design_commit": self.design_commit, "plan_commits": self.plan_commits, "v1_artifact_ids": self.v1_artifact_ids, "migration": self.migration}
         return self.artifact_id == self.content_hash == _digest(type(self).__name__, body) and tuple(x.slot for x in self.migration) == tuple(range(1, 23)) and all(x.verify() for x in self.migration)
+
+
+def build_frozen_amendment_v2() -> Phase2AAcceptanceArchitectureAmendmentV2:
+    layers = {16: ("B",), 17: ("B",), 22: ("A", "C")}
+    behavior = {
+        16: "UNEXPLAINED_MISSING_BAR_PRE_ENGINE_REJECTION",
+        17: "UNSUPPORTED_CORPORATE_ACTION_PRE_ENGINE_REJECTION",
+        20: "ACTUAL_REAL_UPPER_FIRST_PATH",
+        21: "ACTUAL_REAL_LOWER_OR_NEITHER_PATH",
+        22: "ACTUAL_REAL_LOWER_FIRST_PATH_PLUS_SYNTHETIC_AMBIGUITY_FIXTURE",
+    }
+    migration = tuple(MigrationEntryV2.create(
+        slot=slot, layers=layers.get(slot, ("A",)),
+        actual_behavior=behavior.get(slot, f"RETAINED_REAL_CASE_SLOT_{slot}"),
+    ) for slot in range(1, 23))
+    return Phase2AAcceptanceArchitectureAmendmentV2.create(
+        design_commit="f92f0a564c802ddc28dc71153be44d409b6858ee",
+        plan_commits=(
+            "4db0f4ecb9e61853190f755d1bee164d9f84fe9a",
+            "390149882f3265b778b736a16380c13d9a64652a",
+        ),
+        v1_artifact_ids=(
+            "81bd6df1955b9e18831779bd7274947f7da6dca50d5554f94cf7d85da31ac1c9",
+            "84d61057ecf5f527dcb5067fe0ea2b6103edf0f66388535e8ceeffd3ef10c3c8",
+            "236039b2286afaff54017317ceeedc08b8e4c40a5a94a676256167c85d96f4d4",
+            "947a8cd54a0a9a9bf91a8a4b45e7b502c272fb8dff374eab19b99615fca98f48",
+        ),
+        migration=migration,
+    )
 
 
 @dataclass(frozen=True, slots=True)
