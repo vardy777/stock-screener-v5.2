@@ -134,8 +134,14 @@ class RealReferenceCoverageLedgerV2:
     @classmethod
     def create(cls, **values):
         _ids((values["amendment_id"], values["checkpoint7_comparison_ledger_id"]), "ledger provenance")
+        if any(case.evidence_class is not EvidenceClass.REAL_MARKET_EVIDENCE for case in values["cases"]):
+            raise ValueError("Layer A requires REAL_MARKET_EVIDENCE")
         body = dict(values); digest = _digest(cls.__name__, body)
         return cls(**body, ledger_id=digest, content_hash=digest)
+
+    @property
+    def real_reference_cases(self) -> int:
+        return len(self.cases)
 
     def verify(self):
         body = {"amendment_id": self.amendment_id, "checkpoint7_comparison_ledger_id": self.checkpoint7_comparison_ledger_id, "cases": self.cases}
@@ -175,7 +181,16 @@ class FailClosedBoundaryLedgerV2:
     @classmethod
     def create(cls, *, amendment_id: str, cases: tuple[BoundaryExecutionV2, ...]):
         _ids((amendment_id,), "amendment"); body = {"amendment_id": amendment_id, "cases": cases}; digest = _digest(cls.__name__, body)
+        if any(case.evidence_class in {EvidenceClass.REAL_MARKET_EVIDENCE, EvidenceClass.SYNTHETIC_CONTRACT_FIXTURE} for case in cases):
+            raise ValueError("Layer B evidence classification invalid")
         return cls(**body, ledger_id=digest, content_hash=digest)
+
+    @property
+    def real_fail_closed_evidence_cases(self) -> int:
+        return sum(case.evidence_class in {
+            EvidenceClass.REAL_APPROVED_BOUNDARY_CONDITION,
+            EvidenceClass.REAL_MACHINE_VISIBLE_UNSUPPORTED_CONDITION,
+        } for case in self.cases)
 
     def verify(self):
         body = {"amendment_id": self.amendment_id, "cases": self.cases}
@@ -233,8 +248,16 @@ class CalculationEdgeFixtureLedgerV2:
 
     @classmethod
     def create(cls, *, amendment_id: str, fixtures: tuple[CalculationEdgeFixtureV2, ...], comparisons: tuple[EdgeComparisonV2, ...]):
+        if any(item.evidence_class is not EvidenceClass.SYNTHETIC_CONTRACT_FIXTURE for item in fixtures):
+            raise ValueError("Layer C requires SYNTHETIC_CONTRACT_FIXTURE")
+        if tuple(item.fixture_id for item in comparisons) != tuple(item.fixture_id for item in fixtures):
+            raise ValueError("fixture comparison identity mismatch")
         body = {"amendment_id": amendment_id, "fixtures": fixtures, "comparisons": comparisons}; digest = _digest(cls.__name__, body)
         return cls(**body, ledger_id=digest, content_hash=digest)
+
+    @property
+    def synthetic_contract_fixtures(self) -> int:
+        return len(self.fixtures)
 
     def verify(self):
         body = {"amendment_id": self.amendment_id, "fixtures": self.fixtures, "comparisons": self.comparisons}
