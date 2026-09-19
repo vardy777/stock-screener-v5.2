@@ -81,6 +81,7 @@ def test_pure_calculation_fixture_cannot_enter_layer_b_execution():
             observed_rejection_code="UNEXPLAINED_MISSING_BAR:2024-01-03",
             assembler_invocation_count=1,
             engine_invocation_count=0,
+            observed_condition=None,
         )
 
 
