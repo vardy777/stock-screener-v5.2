@@ -24,6 +24,161 @@ def _ids(values: tuple[str, ...], name: str) -> None:
 
 
 @dataclass(frozen=True, slots=True)
+class BoundaryEvidenceProvenanceV2_1:
+    base_evidence_class: str
+    boundary_exercise_class: str
+    real_condition_observed: bool
+    real_condition_availability: str
+    unavailability_evidence_id: str | None
+    content_hash: str
+
+    @classmethod
+    def create(cls, **values):
+        base = values["base_evidence_class"]
+        exercise = values["boundary_exercise_class"]
+        observed = values["real_condition_observed"]
+        availability = values["real_condition_availability"]
+        unavailable_id = values["unavailability_evidence_id"]
+        allowed_base = {"NONE", "REAL_MARKET_EVIDENCE", "REAL_MACHINE_VISIBLE_UNSUPPORTED_SCOPE"}
+        allowed_exercise = {
+            "DETERMINISTIC_CONTRACT_FIXTURE",
+            "REAL_UNSUPPORTED_MARKET_EVENT",
+            "PURE_SYNTHETIC_CALCULATION_FIXTURE",
+        }
+        if base not in allowed_base or exercise not in allowed_exercise:
+            raise ValueError("invalid V2.1 provenance class")
+        if exercise == "DETERMINISTIC_CONTRACT_FIXTURE" and observed:
+            raise ValueError("fixture cannot be real observed")
+        if exercise == "REAL_UNSUPPORTED_MARKET_EVENT" and not observed:
+            raise ValueError("unsupported market event must be observed")
+        if availability == "REAL_REFERENCE_SAMPLE_UNAVAILABLE":
+            if observed or unavailable_id is None:
+                raise ValueError("unavailable condition provenance invalid")
+            _ids((unavailable_id,), "unavailability evidence")
+        elif unavailable_id is not None:
+            raise ValueError("unavailability evidence requires unavailable status")
+        body = dict(values)
+        return cls(**body, content_hash=_digest(cls.__name__, body))
+
+    def verify(self) -> bool:
+        body = {name: getattr(self, name) for name in self.__dataclass_fields__ if name != "content_hash"}
+        try:
+            rebuilt = type(self).create(**body)
+        except ValueError:
+            return False
+        return self.content_hash == rebuilt.content_hash
+
+
+@dataclass(frozen=True, slots=True)
+class BoundaryExecutionV2_1:
+    semantic_category: str
+    provenance: BoundaryEvidenceProvenanceV2_1
+    input_evidence_ids: tuple[str, ...]
+    real_base_bundle_id: str | None
+    real_base_lineage_ids: tuple[str, ...]
+    transform_id: str | None
+    transformed_evidence_id: str | None
+    removed_session: str | None
+    rejection_boundary: str
+    expected_rejection_code: str
+    observed_rejection_code: str
+    assembler_invocation_count: int
+    engine_invocation_count: int
+    content_hash: str
+
+    @classmethod
+    def create(cls, **values):
+        provenance = values["provenance"]
+        if not provenance.verify():
+            raise ValueError("invalid boundary provenance")
+        if provenance.boundary_exercise_class == "PURE_SYNTHETIC_CALCULATION_FIXTURE":
+            raise ValueError("calculation fixture cannot enter Layer B")
+        _ids(values["input_evidence_ids"], "boundary evidence")
+        base_id = values["real_base_bundle_id"]
+        lineage = values["real_base_lineage_ids"]
+        if base_id is not None:
+            _ids((base_id,), "real base bundle")
+        if lineage:
+            _ids(lineage, "real base lineage")
+            if len(lineage) != 5:
+                raise ValueError("exact five-domain real base required")
+        for name in ("transform_id", "transformed_evidence_id"):
+            if values[name] is not None:
+                _ids((values[name],), name)
+        if values["engine_invocation_count"] != 0:
+            raise ValueError("pre-engine boundary invoked engine")
+        body = dict(values)
+        return cls(**body, content_hash=_digest(cls.__name__, body))
+
+    def verify(self) -> bool:
+        body = {name: getattr(self, name) for name in self.__dataclass_fields__ if name != "content_hash"}
+        try:
+            rebuilt = type(self).create(**body)
+        except ValueError:
+            return False
+        return self.content_hash == rebuilt.content_hash
+
+
+@dataclass(frozen=True, slots=True)
+class FailClosedBoundaryLedgerV2_1:
+    amendment_id: str
+    cases: tuple[BoundaryExecutionV2_1, ...]
+    ledger_id: str
+    content_hash: str
+
+    @classmethod
+    def create(cls, *, amendment_id: str, cases: tuple[BoundaryExecutionV2_1, ...]):
+        _ids((amendment_id,), "amendment")
+        if not cases or not all(case.verify() for case in cases):
+            raise ValueError("invalid V2.1 boundary cases")
+        body = {"amendment_id": amendment_id, "cases": cases}
+        digest = _digest(cls.__name__, body)
+        return cls(**body, ledger_id=digest, content_hash=digest)
+
+    @property
+    def real_observed_boundary_cases(self) -> int:
+        return sum(case.provenance.real_condition_observed for case in self.cases)
+
+    def verify(self) -> bool:
+        body = {"amendment_id": self.amendment_id, "cases": self.cases}
+        return (
+            self.ledger_id == self.content_hash == _digest(type(self).__name__, body)
+            and all(case.verify() for case in self.cases)
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class Phase2AAcceptanceArchitectureAmendmentV2_1:
+    original_v2_design_commit: str
+    original_v2_plan_commit: str
+    plan_correction_commit: str
+    v2_1_design_amendment_id: str
+    v2_1_design_head: str
+    checkpoint8_discovery_id: str
+    supersedes_attempt1_amendment_id: str
+    reason: str
+    artifact_id: str
+    content_hash: str
+
+    @classmethod
+    def create(cls, **values):
+        _ids(tuple(values[name] for name in (
+            "original_v2_design_commit", "original_v2_plan_commit", "plan_correction_commit",
+            "v2_1_design_amendment_id", "v2_1_design_head", "checkpoint8_discovery_id",
+            "supersedes_attempt1_amendment_id",
+        )), "V2.1 authorities")
+        if values["reason"] != "ACCEPTANCE_EVIDENCE_CLASSIFICATION_AND_GATE_EVALUATION_CORRECTION":
+            raise ValueError("invalid V2.1 amendment reason")
+        body = dict(values)
+        digest = _digest(cls.__name__, body)
+        return cls(**body, artifact_id=digest, content_hash=digest)
+
+    def verify(self) -> bool:
+        body = {name: getattr(self, name) for name in self.__dataclass_fields__ if name not in {"artifact_id", "content_hash"}}
+        return self.artifact_id == self.content_hash == _digest(type(self).__name__, body)
+
+
+@dataclass(frozen=True, slots=True)
 class MigrationEntryV2:
     slot: int
     layers: tuple[str, ...]
@@ -91,6 +246,19 @@ def build_frozen_amendment_v2() -> Phase2AAcceptanceArchitectureAmendmentV2:
             "947a8cd54a0a9a9bf91a8a4b45e7b502c272fb8dff374eab19b99615fca98f48",
         ),
         migration=migration,
+    )
+
+
+def build_frozen_amendment_v2_1() -> Phase2AAcceptanceArchitectureAmendmentV2_1:
+    return Phase2AAcceptanceArchitectureAmendmentV2_1.create(
+        original_v2_design_commit="f92f0a564c802ddc28dc71153be44d409b6858ee",
+        original_v2_plan_commit="4db0f4ecb9e61853190f755d1bee164d9f84fe9a",
+        plan_correction_commit="390149882f3265b778b736a16380c13d9a64652a",
+        v2_1_design_amendment_id="d4a7941e2583eb84dd1bf501fb9183d5346f3813f383704b691c3798fb8ac25b",
+        v2_1_design_head="a66825e25d40a46eceae18a50f1f2535ab9ee975",
+        checkpoint8_discovery_id="947a8cd54a0a9a9bf91a8a4b45e7b502c272fb8dff374eab19b99615fca98f48",
+        supersedes_attempt1_amendment_id=build_frozen_amendment_v2().artifact_id,
+        reason="ACCEPTANCE_EVIDENCE_CLASSIFICATION_AND_GATE_EVALUATION_CORRECTION",
     )
 
 
