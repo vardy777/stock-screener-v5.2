@@ -7,13 +7,86 @@ from pathlib import Path
 from v5_2.data.identity import content_hash
 from v5_2.data.label_evidence_assembler import EvidenceAssemblyError, Phase2AEvidenceAssemblerV1
 from v5_2.labels.acceptance import build_frozen_inventory
-from v5_2.labels.acceptance_v2_contracts import BoundaryExecutionV2, EvidenceClass
+from v5_2.labels.acceptance_v2_contracts import (
+    BoundaryEvidenceProvenanceV2_1,
+    BoundaryExecutionV2,
+    BoundaryExecutionV2_1,
+    EvidenceClass,
+)
 from v5_2.labels.acceptance_v2_contracts import FailClosedBoundaryLedgerV2, Phase2AAcceptanceArchitectureAmendmentV2
 
 
 CA_MANIFEST_ID = "5086896d0066baa928fe44c3469b2c1362feb2068db04acb7336b38c13bdbe2c"
 SUPPORTED_ACTION_TYPES = ("BONUS_SHARE", "CASH_DIVIDEND")
 UNSUPPORTED_ACTION_TYPES = ("RIGHTS_ISSUE", "SHARE_CONVERSION", "STOCK_SPLIT")
+CHECKPOINT8_DISCOVERY_ID = "947a8cd54a0a9a9bf91a8a4b45e7b502c272fb8dff374eab19b99615fca98f48"
+
+
+def create_remove_future_bar_transform_v2_1(
+    base_bundle,
+    *,
+    removed_session,
+    changed_components: tuple[str, ...] = ("future_bars",),
+) -> tuple[dict[str, object], str]:
+    if changed_components != ("future_bars",):
+        raise ValueError("REMOVE_FUTURE_BAR transform scope violation")
+    future = tuple(day for day in base_bundle.approved_exchange_sessions if day > base_bundle.anchor_session)[:5]
+    if removed_session not in future or not any(bar.session == removed_session for bar in base_bundle.future_bars):
+        raise ValueError("REMOVE_FUTURE_BAR transform scope violation")
+    body = {
+        "schema_version": "RemoveFutureBarTransformV2_1",
+        "base_bundle_id": base_bundle.content_hash,
+        "five_domain_lineage_ids": tuple(item.content_hash for item in base_bundle.domain_lineage),
+        "removed_required_future_session": removed_session.isoformat(),
+        "operation": "REMOVE_FUTURE_BAR",
+    }
+    return body, content_hash(body)
+
+
+def build_missing_bar_boundary_case_v2_1(repository_root: Path, *, engine: object) -> BoundaryExecutionV2_1:
+    slot = build_frozen_inventory().slots[0]
+    assembler = Phase2AEvidenceAssemblerV1(repository_root)
+    base = assembler.assemble(slot)
+    removed = tuple(day for day in base.approved_exchange_sessions if day > base.anchor_session)[0]
+    transform, transform_id = create_remove_future_bar_transform_v2_1(base, removed_session=removed)
+    transformed_evidence_id = content_hash({
+        "schema_version": "TransformedBoundaryEvidenceV2_1",
+        "base_bundle_id": base.content_hash,
+        "transform_id": transform_id,
+        "removed_required_future_session": removed.isoformat(),
+    })
+    try:
+        assembler.assemble(slot, injected_fault="REMOVE_FUTURE_BAR")
+    except EvidenceAssemblyError as error:
+        observed = str(error)
+    else:
+        raise ValueError("missing-bar boundary did not reject")
+    expected = f"UNEXPLAINED_MISSING_BAR:{removed.isoformat()}"
+    if observed != expected:
+        raise ValueError("missing-bar rejection contract changed")
+    provenance = BoundaryEvidenceProvenanceV2_1.create(
+        base_evidence_class="REAL_MARKET_EVIDENCE",
+        boundary_exercise_class="DETERMINISTIC_CONTRACT_FIXTURE",
+        real_condition_observed=False,
+        real_condition_availability="REAL_REFERENCE_SAMPLE_UNAVAILABLE",
+        unavailability_evidence_id=CHECKPOINT8_DISCOVERY_ID,
+    )
+    evidence_ids = tuple(dict.fromkeys((slot.candidate_hash, *slot.evidence_ids, transform_id, transformed_evidence_id)))
+    return BoundaryExecutionV2_1.create(
+        semantic_category="UNEXPLAINED_MISSING_BAR",
+        provenance=provenance,
+        input_evidence_ids=evidence_ids,
+        real_base_bundle_id=base.content_hash,
+        real_base_lineage_ids=tuple(item.content_hash for item in base.domain_lineage),
+        transform_id=transform_id,
+        transformed_evidence_id=transformed_evidence_id,
+        removed_session=removed.isoformat(),
+        rejection_boundary="Phase2AEvidenceAssemblerV1.assemble",
+        expected_rejection_code=expected,
+        observed_rejection_code=observed,
+        assembler_invocation_count=1,
+        engine_invocation_count=0,
+    )
 
 
 @dataclass(frozen=True, slots=True)
