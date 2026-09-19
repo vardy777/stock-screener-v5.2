@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from datetime import date
 from decimal import Decimal
+from dataclasses import dataclass
+
+from v5_2.data.identity import content_hash
 
 from v5_2.labels.calculation import (
     EconomicPathPointV1,
@@ -17,11 +20,57 @@ from v5_2.labels.acceptance_v2_contracts import (
     EdgeResultV2,
     EvidenceClass,
     Phase2AAcceptanceArchitectureAmendmentV2,
+    Phase2AAcceptanceArchitectureAmendmentV2_1,
+    build_frozen_amendment_v2,
 )
 from v5_2.labels.independent_edge_reference import calculate_independent_edge_result
 
 
 SESSIONS = ("2024-01-02", "2024-01-03", "2024-01-04", "2024-01-05", "2024-01-08")
+EDGE_SEMANTICS_V2_1 = (
+    "UPPER_FIRST",
+    "LOWER_FIRST",
+    "NEITHER",
+    "SAME_SESSION_BARRIER_AMBIGUITY",
+)
+
+
+@dataclass(frozen=True, slots=True)
+class CalculationEdgeFixtureLedgerV2_1:
+    amendment_id: str
+    fixtures: tuple[CalculationEdgeFixtureV2, ...]
+    comparisons: tuple[EdgeComparisonV2, ...]
+    ledger_id: str
+    content_hash: str
+
+    @classmethod
+    def create(cls, *, amendment_id: str, fixtures: tuple[CalculationEdgeFixtureV2, ...],
+               comparisons: tuple[EdgeComparisonV2, ...]):
+        body = {"amendment_id": amendment_id, "fixtures": fixtures, "comparisons": comparisons}
+        digest = content_hash({"schema_version": cls.__name__, **body})
+        return cls(**body, ledger_id=digest, content_hash=digest)
+
+    def verify(self) -> bool:
+        body = {"amendment_id": self.amendment_id, "fixtures": self.fixtures, "comparisons": self.comparisons}
+        digest = content_hash({"schema_version": type(self).__name__, **body})
+        return self.ledger_id == self.content_hash == digest and validate_edge_semantics_v2_1(self)
+
+
+def validate_edge_semantics_v2_1(ledger: CalculationEdgeFixtureLedgerV2_1) -> bool:
+    if tuple(item.name for item in ledger.fixtures) != EDGE_SEMANTICS_V2_1:
+        return False
+    if len(ledger.comparisons) != 4:
+        return False
+    for fixture, comparison in zip(ledger.fixtures, ledger.comparisons):
+        if not fixture.verify() or fixture.evidence_class is not EvidenceClass.SYNTHETIC_CONTRACT_FIXTURE:
+            return False
+        if fixture.expected_outcome != fixture.name:
+            return False
+        if comparison.fixture_id != fixture.fixture_id:
+            return False
+        if comparison.disposition != "MATCH" or comparison.production != comparison.independent:
+            return False
+    return True
 
 
 def _fixture(name: str, highs: tuple[str, ...], lows: tuple[str, ...], closes: tuple[str, ...], expected: str) -> CalculationEdgeFixtureV2:
@@ -94,3 +143,20 @@ def build_edge_fixture_ledger(amendment: Phase2AAcceptanceArchitectureAmendmentV
     return CalculationEdgeFixtureLedgerV2.create(
         amendment_id=amendment.artifact_id, fixtures=fixtures, comparisons=tuple(comparisons),
     )
+
+
+def build_edge_fixture_ledger_v2_1(
+    amendment: Phase2AAcceptanceArchitectureAmendmentV2_1,
+) -> CalculationEdgeFixtureLedgerV2_1:
+    if not amendment.verify():
+        raise ValueError("invalid V2.1 amendment")
+    fixtures = build_frozen_edge_fixtures(build_frozen_amendment_v2())
+    previous = build_edge_fixture_ledger(build_frozen_amendment_v2(), fixtures)
+    result = CalculationEdgeFixtureLedgerV2_1.create(
+        amendment_id=amendment.artifact_id,
+        fixtures=previous.fixtures,
+        comparisons=previous.comparisons,
+    )
+    if not result.verify():
+        raise ValueError("invalid V2.1 edge semantic coverage")
+    return result
