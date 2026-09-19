@@ -118,3 +118,45 @@ class LabelPartitionV1:
     def verify(self) -> bool:
         body = {"partition_key": self.partition_key, "generation_id": self.generation_id, "row_ids": self.row_ids, "row_count": self.row_count}
         return bool(_MONTH.fullmatch(self.partition_key)) and self.row_count == len(self.row_ids) and self.partition_id == _digest(type(self).__name__, body)
+
+
+@dataclass(frozen=True, slots=True)
+class LabelDatasetManifestV1:
+    previous_manifest_id: str | None
+    active_partition_ids: tuple[str, ...]
+    partition_supersession: tuple[tuple[str, str], ...]
+    phase2a_acceptance_id: str
+    lineage_ids: tuple[str, ...]
+    manifest_id: str
+
+    @classmethod
+    def create(cls, *, previous_manifest_id: str | None, active_partitions: tuple[LabelPartitionV1, ...],
+               partition_supersession: tuple[tuple[str, str], ...], phase2a_acceptance_id: str,
+               lineage_ids: tuple[str, ...], previous_manifest: LabelDatasetManifestV1 | None = None) -> LabelDatasetManifestV1:
+        if not active_partitions or not all(partition.verify() for partition in active_partitions):
+            raise ValueError("verified active partitions required")
+        active_ids = tuple(partition.partition_id for partition in active_partitions)
+        if len(active_ids) != len(set(active_ids)):
+            raise ValueError("duplicate active partition")
+        if not re.fullmatch(r"[0-9a-f]{64}", phase2a_acceptance_id) or not lineage_ids or not all(re.fullmatch(r"[0-9a-f]{64}", value) for value in lineage_ids):
+            raise ValueError("immutable acceptance and lineage IDs required")
+        if previous_manifest_id is not None and not re.fullmatch(r"[0-9a-f]{64}", previous_manifest_id):
+            raise ValueError("previous manifest ID invalid")
+        if previous_manifest is not None and (not previous_manifest.verify() or previous_manifest.manifest_id != previous_manifest_id):
+            raise ValueError("previous manifest lineage invalid")
+        old_ids = tuple(old for old, _ in partition_supersession)
+        new_ids = tuple(new for _, new in partition_supersession)
+        if len(old_ids) != len(set(old_ids)) or len(new_ids) != len(set(new_ids)):
+            raise ValueError("duplicate supersession mapping")
+        if partition_supersession and (previous_manifest_id is None or previous_manifest is None):
+            raise ValueError("supersession requires previous manifest")
+        if any(not re.fullmatch(r"[0-9a-f]{64}", value) for value in (*old_ids, *new_ids)) or any(new not in active_ids or old in active_ids for old, new in partition_supersession) or any(old not in previous_manifest.active_partition_ids for old in old_ids):
+            raise ValueError("supersession mapping invalid")
+        body = {"previous_manifest_id": previous_manifest_id, "active_partition_ids": active_ids,
+                "partition_supersession": partition_supersession, "phase2a_acceptance_id": phase2a_acceptance_id,
+                "lineage_ids": lineage_ids}
+        return cls(**body, manifest_id=_digest(cls.__name__, body))
+
+    def verify(self) -> bool:
+        body = {name: getattr(self, name) for name in ("previous_manifest_id", "active_partition_ids", "partition_supersession", "phase2a_acceptance_id", "lineage_ids")}
+        return self.manifest_id == _digest(type(self).__name__, body)
