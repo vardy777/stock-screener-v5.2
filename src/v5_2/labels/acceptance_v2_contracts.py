@@ -479,6 +479,97 @@ class CalculationEdgeFixtureLedgerV2:
         return self.ledger_id == self.content_hash == _digest(type(self).__name__, body) and all(x.verify() for x in self.fixtures)
 
 
+class GatePredicateIdV2_1(StrEnum):
+    LABEL_CONTRACT = "label_contract"
+    CAUSAL_ISOLATION = "causal_isolation"
+    TRADING_SESSION_SEMANTICS = "trading_session_semantics"
+    RETURN_SEMANTICS = "return_semantics"
+    MFE_MAE_SEMANTICS = "mfe_mae_semantics"
+    BARRIER_SEMANTICS = "barrier_semantics"
+    CORPORATE_ACTION_SAFETY = "corporate_action_safety"
+    SUSPENSION_SAFETY = "suspension_safety"
+    DELISTING_SAFETY = "delisting_safety"
+    IDENTITY_SAFETY = "identity_safety"
+    MISSING_DATA_FAIL_CLOSED = "missing_data_fail_closed"
+    LABEL_PENDING = "label_pending"
+    NOT_LABEL_SAFE = "not_label_safe"
+    REFERENCE_SAMPLES = "reference_samples"
+    INDEPENDENT_VERIFICATION = "independent_verification"
+    DETERMINISTIC_REPLAY = "deterministic_replay"
+
+
+@dataclass(frozen=True, slots=True)
+class GateConsumptionV2_1:
+    gate: str
+    predicate_id: GatePredicateIdV2_1
+    artifact_ids: tuple[str, ...]
+    content_hash: str
+
+    @classmethod
+    def create(cls, *, gate: str, predicate_id: GatePredicateIdV2_1, artifact_ids: tuple[str, ...]):
+        _ids(artifact_ids, "V2.1 gate artifacts")
+        body = {"gate": gate, "predicate_id": GatePredicateIdV2_1(predicate_id), "artifact_ids": artifact_ids}
+        return cls(**body, content_hash=_digest(cls.__name__, body))
+
+    def verify(self) -> bool:
+        body = {"gate": self.gate, "predicate_id": self.predicate_id, "artifact_ids": self.artifact_ids}
+        return self.content_hash == _digest(type(self).__name__, body)
+
+
+@dataclass(frozen=True, slots=True)
+class GateArtifactConsumptionMapV2_1:
+    amendment_id: str
+    entries: tuple[GateConsumptionV2_1, ...]
+    map_id: str
+    content_hash: str
+
+    @classmethod
+    def create(cls, *, amendment_id: str, entries: tuple[GateConsumptionV2_1, ...]):
+        from v5_2.labels.acceptance import ACCEPTANCE_GATES
+        if tuple(item.gate for item in entries) != ACCEPTANCE_GATES or not all(item.verify() for item in entries):
+            raise ValueError("exact 16 acceptance gates required")
+        body = {"amendment_id": amendment_id, "entries": entries}
+        digest = _digest(cls.__name__, body)
+        return cls(**body, map_id=digest, content_hash=digest)
+
+    def verify(self) -> bool:
+        body = {"amendment_id": self.amendment_id, "entries": self.entries}
+        return self.map_id == self.content_hash == _digest(type(self).__name__, body) and all(x.verify() for x in self.entries)
+
+
+@dataclass(frozen=True, slots=True)
+class GateEvidenceV2_1:
+    amendment: object
+    layer_a: object
+    layer_b: object
+    layer_c: object
+    gate_map: GateArtifactConsumptionMapV2_1
+    supersession: object | None
+    contract_identity_verified: bool
+    exact_five_domains_verified: bool
+    ast_isolation_verified: bool
+    replay_bytes_match: bool
+
+
+@dataclass(frozen=True, slots=True)
+class GateEvaluationV2_1:
+    gate: str
+    predicate_id: GatePredicateIdV2_1
+    status: str
+    content_hash: str
+
+    @classmethod
+    def create(cls, *, gate: str, predicate_id: GatePredicateIdV2_1, status: str):
+        if status not in {"PASS", "FAIL"}:
+            raise ValueError("invalid gate status")
+        body = {"gate": gate, "predicate_id": GatePredicateIdV2_1(predicate_id), "status": status}
+        return cls(**body, content_hash=_digest(cls.__name__, body))
+
+    def verify(self) -> bool:
+        body = {"gate": self.gate, "predicate_id": self.predicate_id, "status": self.status}
+        return self.content_hash == _digest(type(self).__name__, body)
+
+
 @dataclass(frozen=True, slots=True)
 class GateConsumptionV2:
     gate: str
