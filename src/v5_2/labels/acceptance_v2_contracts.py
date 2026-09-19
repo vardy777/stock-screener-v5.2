@@ -92,6 +92,13 @@ class BoundaryExecutionV2_1:
         provenance = values["provenance"]
         if not provenance.verify():
             raise ValueError("invalid boundary provenance")
+        if values["semantic_category"] == "UNSUPPORTED_CA" and (
+            provenance.boundary_exercise_class != "REAL_UNSUPPORTED_MARKET_EVENT"
+            or not provenance.real_condition_observed
+            or values["rejection_boundary"] != "CorporateActionRepository.query"
+            or values["observed_condition"] is None
+        ):
+            raise ValueError("real unsupported event required")
         if provenance.boundary_exercise_class == "PURE_SYNTHETIC_CALCULATION_FIXTURE":
             raise ValueError("calculation fixture cannot enter Layer B")
         _ids(values["input_evidence_ids"], "boundary evidence")
@@ -325,6 +332,8 @@ class RealReferenceCaseV2:
     @classmethod
     def create(cls, **values):
         values["evidence_class"] = EvidenceClass(values["evidence_class"])
+        if values["evidence_class"] is not EvidenceClass.REAL_MARKET_EVIDENCE:
+            raise ValueError("RealReferenceCaseV2 requires REAL_MARKET_EVIDENCE")
         for name in ("bundle_id", "production_result_id", "independent_result_id", "comparison_id"):
             _ids((values[name],), name)
         _ids(values["five_domain_lineage_ids"], "five-domain lineage")
