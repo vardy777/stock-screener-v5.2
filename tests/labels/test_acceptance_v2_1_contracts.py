@@ -3,6 +3,7 @@ from dataclasses import replace
 import pytest
 
 from v5_2.labels.acceptance_v2_contracts import (
+    AttemptInfrastructureSupersessionV2_1,
     BoundaryEvidenceProvenanceV2_1,
     BoundaryExecutionV2_1,
     EvidenceClass,
@@ -14,6 +15,14 @@ from v5_2.labels.acceptance_v2_contracts import (
 
 H = "a" * 64
 CHECKPOINT8_DISCOVERY_ID = "947a8cd54a0a9a9bf91a8a4b45e7b502c272fb8dff374eab19b99615fca98f48"
+ATTEMPT1_IDS = (
+    "31d262c3a54ebb15b9161a1a2b36e9bdd999a61c92aeb2d87a64ddedcf9e4365",
+    "685a441408b4621df177dec7d5a54375b6b15874c49520b8c6b788ef9f8372b8",
+    "ad915a5abb2fcf071929089cf85c7924c6c2254ccf8b870b32c613d96ba62505",
+    "455fca83088ee0c40f30461c04e8fd5e04f40d47bdc8e94c4d70d0c986ad4ef6",
+    "9b9ec9d4039194dcf2281b2aadcbf380fcd5da98acc79d2e5ff20eca90e6c264",
+    "97e610d410a58001963791e6992cac4a1eb469e4f347afde4e0a72aeeea6e934",
+)
 
 
 def test_missing_bar_requires_real_base_plus_non_real_fixture():
@@ -87,3 +96,26 @@ def test_frozen_v2_1_amendment_pins_all_authorities_and_v2_is_unchanged():
     assert result.supersedes_attempt1_amendment_id == old.artifact_id
     assert build_frozen_amendment_v2() == old
     assert not replace(result, content_hash="0" * 64).verify()
+
+
+def test_supersession_pins_six_old_and_six_new_ids():
+    item = AttemptInfrastructureSupersessionV2_1.create(
+        amendment_id=build_frozen_amendment_v2_1().artifact_id,
+        attempt1_ids=ATTEMPT1_IDS,
+        attempt2_ids=tuple(chr(103 + i) * 64 for i in range(6)),
+        reason="INFRASTRUCTURE_ACCEPTANCE_CORRECTNESS_DEFECT",
+    )
+    assert item.verify()
+    assert set(item.attempt1_ids) == set(ATTEMPT1_IDS)
+    assert not replace(item, content_hash="0" * 64).verify()
+
+
+@pytest.mark.parametrize("reason", ["replacement", "", "ACCEPTANCE_DEFECT"])
+def test_supersession_rejects_overlap_or_wrong_reason(reason):
+    with pytest.raises(ValueError):
+        AttemptInfrastructureSupersessionV2_1.create(
+            amendment_id=build_frozen_amendment_v2_1().artifact_id,
+            attempt1_ids=ATTEMPT1_IDS,
+            attempt2_ids=ATTEMPT1_IDS,
+            reason=reason,
+        )

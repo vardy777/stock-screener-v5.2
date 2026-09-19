@@ -178,6 +178,52 @@ class Phase2AAcceptanceArchitectureAmendmentV2_1:
         return self.artifact_id == self.content_hash == _digest(type(self).__name__, body)
 
 
+ATTEMPT1_INFRASTRUCTURE_IDS = (
+    "31d262c3a54ebb15b9161a1a2b36e9bdd999a61c92aeb2d87a64ddedcf9e4365",
+    "685a441408b4621df177dec7d5a54375b6b15874c49520b8c6b788ef9f8372b8",
+    "ad915a5abb2fcf071929089cf85c7924c6c2254ccf8b870b32c613d96ba62505",
+    "455fca83088ee0c40f30461c04e8fd5e04f40d47bdc8e94c4d70d0c986ad4ef6",
+    "9b9ec9d4039194dcf2281b2aadcbf380fcd5da98acc79d2e5ff20eca90e6c264",
+    "97e610d410a58001963791e6992cac4a1eb469e4f347afde4e0a72aeeea6e934",
+)
+
+
+@dataclass(frozen=True, slots=True)
+class AttemptInfrastructureSupersessionV2_1:
+    amendment_id: str
+    attempt1_ids: tuple[str, ...]
+    attempt2_ids: tuple[str, ...]
+    reason: str
+    supersession_id: str
+    content_hash: str
+
+    @classmethod
+    def create(cls, **values):
+        amendment_id = values["amendment_id"]
+        old_ids = values["attempt1_ids"]
+        new_ids = values["attempt2_ids"]
+        _ids((amendment_id,), "V2.1 amendment")
+        _ids(old_ids, "Attempt 1 artifacts")
+        _ids(new_ids, "Attempt 2 artifacts")
+        if old_ids != ATTEMPT1_INFRASTRUCTURE_IDS or len(new_ids) != 6:
+            raise ValueError("exact six Attempt 1 and Attempt 2 artifacts required")
+        if set(old_ids) & set(new_ids):
+            raise ValueError("Attempt artifact identities must be disjoint")
+        if values["reason"] != "INFRASTRUCTURE_ACCEPTANCE_CORRECTNESS_DEFECT":
+            raise ValueError("invalid supersession reason")
+        body = dict(values)
+        digest = _digest(cls.__name__, body)
+        return cls(**body, supersession_id=digest, content_hash=digest)
+
+    def verify(self) -> bool:
+        body = {name: getattr(self, name) for name in self.__dataclass_fields__ if name not in {"supersession_id", "content_hash"}}
+        try:
+            rebuilt = type(self).create(**body)
+        except ValueError:
+            return False
+        return self.supersession_id == self.content_hash == rebuilt.content_hash
+
+
 @dataclass(frozen=True, slots=True)
 class MigrationEntryV2:
     slot: int
