@@ -9,6 +9,7 @@ from v5_2.labels.acceptance_v2_1_final import (
     run_final_acceptance_v2_1,
     verify_frozen_infrastructure_v2_1,
 )
+from scripts.build_phase2a_v2_1_final_acceptance import materialize_final_acceptance_v2_1
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -40,3 +41,23 @@ def test_final_acceptance_is_deterministic_for_same_frozen_inputs():
     second = run_final_acceptance_v2_1(ROOT)
     assert first == second
     assert first.acceptance_id == second.acceptance_id
+
+
+def test_final_materializer_replays_byte_identically_and_is_idempotent(tmp_path):
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    result = materialize_final_acceptance_v2_1(ROOT, first)
+    materialize_final_acceptance_v2_1(ROOT, first)
+    materialize_final_acceptance_v2_1(ROOT, second)
+    filename = f"final-phase2a-acceptance-v2-1-{result.acceptance_id}.json"
+    assert (first / filename).read_bytes() == (second / filename).read_bytes()
+    assert len(tuple(first.glob("*.json"))) == 1
+
+
+def test_final_materializer_rejects_different_byte_collision(tmp_path):
+    output = tmp_path / "final"
+    result = materialize_final_acceptance_v2_1(ROOT, output)
+    target = output / f"final-phase2a-acceptance-v2-1-{result.acceptance_id}.json"
+    target.write_bytes(b"{}")
+    with pytest.raises(RuntimeError, match="immutable final acceptance collision"):
+        materialize_final_acceptance_v2_1(ROOT, output)
