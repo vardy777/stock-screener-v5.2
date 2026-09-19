@@ -83,11 +83,15 @@ quantization and fixed-point ASCII (never exponent notation); booleans are JSON
 booleans; unavailable values are JSON `null`; reason codes are exact enum
 strings; dates are ISO dates; aware timestamps normalize to ISO UTC text.
 
-**Maturation decision: field-level.** The reference engine already makes H1
-available while H3/H5 and their dependent fields can remain `LABEL_PENDING`.
-Phase 2B stores those exact seven values. It creates no competing row-state
-machine and may not lower a partially mature row to all-pending. Consumers may
-call a row fully available only when every value is `LABEL_AVAILABLE`; any
+**Maturation decision: field-level.** This is frozen Phase 2A behavior, not a
+Phase 2B addition: `LabelState` belongs to each `LabelValueV1`, and
+`ReferenceLabelEngine.evaluate` creates each value independently from its
+frozen horizon completion. The existing `test_one_day_available_while_five_day_labels_pending`
+and the immutable-evidence audit recorded in
+`V5_2_PHASE_2B_MATURATION_CONTRACT_AUDIT.md` prove the mixed result. Phase 2B
+stores those exact seven values. It creates no competing row-state machine and
+may not lower a partially mature row to all-pending. Consumers may call a row
+fully available only when every value is `LABEL_AVAILABLE`; any
 `NOT_LABEL_SAFE` value remains unsafe. Reporting summaries are derived counts,
 not new semantics.
 
@@ -108,13 +112,17 @@ The deterministic incremental selector has two worksets:
 ```text
 NEW_ANCHORS = newly eligible anchors for an approved completed session
 MATURED_PENDING_ANCHORS = prior rows with a pending LabelValueV1 whose frozen
-                          horizon endpoint is now <= latest approved completed
+                          maturity endpoint is now <= latest approved completed
                           exchange session
 ```
 
-Anchors affected by an explicit approval/lineage supersession or revocation are
-also selected. A revocation causes a scoped replacement or typed quarantine;
-it cannot silently retain unsafe research truth.
+The endpoint is value-specific and frozen: return_1d uses H1; return_3d uses
+H3; return_5d, MFE_5d, MAE_5d, and both barriers use H5. A barrier's decisive
+hit may be observed earlier, but it remains pending until H5; early barrier
+hits therefore do not create an early-maturation work item. Anchors affected by
+an explicit approval/lineage supersession or revocation are also selected. A
+revocation causes a scoped replacement or typed quarantine; it cannot silently
+retain unsafe research truth.
 
 `NOT_LABEL_SAFE` is not pending, missing, or zero return. The row preserves its
 exact `LabelReasonCode`, affected values, bundle hash, and barrier evidence.
