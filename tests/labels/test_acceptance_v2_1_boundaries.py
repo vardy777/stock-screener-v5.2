@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -6,10 +7,12 @@ from v5_2.data.identity import content_hash
 from v5_2.data.label_evidence_assembler import Phase2AEvidenceAssemblerV1
 from v5_2.labels.acceptance import build_frozen_inventory
 from v5_2.labels.acceptance_v2_boundaries import (
+    build_fail_closed_boundary_ledger_v2_1,
     build_missing_bar_boundary_case_v2_1,
     build_unsupported_ca_boundary_case_v2_1,
     create_remove_future_bar_transform_v2_1,
 )
+from v5_2.labels.acceptance_v2_contracts import build_frozen_amendment_v2_1
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -119,3 +122,34 @@ def test_acceptance_only_preflight_cannot_satisfy_v2_1_unsupported_ca():
     result = build_unsupported_ca_boundary_case_v2_1(ROOT, engine=ForbiddenEngine())
     assert result.rejection_boundary == "CorporateActionRepository.query"
     assert result.rejection_boundary != "ACCEPTANCE_ONLY_CA_PREFLIGHT"
+
+
+def test_v2_1_boundary_ledger_has_exact_categories_and_truthful_provenance():
+    result = build_fail_closed_boundary_ledger_v2_1(ROOT, build_frozen_amendment_v2_1())
+    assert result.verify()
+    assert tuple(case.semantic_category for case in result.cases) == (
+        "UNEXPLAINED_MISSING_BAR",
+        "UNSUPPORTED_CA",
+        "REVOKED_APPROVAL",
+        "TAMPERED_ARTIFACT",
+        "MISSING_REQUIRED_DOMAIN",
+        "AMBIGUOUS_IDENTITY",
+        "MALFORMED_CALENDAR",
+        "INVALID_LINEAGE",
+        "ROLE_SWAP",
+        "DUPLICATE_DOMAIN",
+    )
+    missing, unsupported = result.cases[:2]
+    assert missing.provenance.real_condition_observed is False
+    assert missing.provenance.boundary_exercise_class == "DETERMINISTIC_CONTRACT_FIXTURE"
+    assert unsupported.provenance.real_condition_observed is True
+    assert unsupported.rejection_boundary == "CorporateActionRepository.query"
+    assert result.real_observed_boundary_cases == 1
+    assert all(case.engine_invocation_count == 0 for case in result.cases)
+
+
+def test_attempt1_layer_b_remains_historical_and_is_not_v2_1():
+    old_id = "ad915a5abb2fcf071929089cf85c7924c6c2254ccf8b870b32c613d96ba62505"
+    old = json.loads((ROOT / f"data/phase_2a/v2_infrastructure/fail-closed-boundaries-{old_id}.json").read_text())
+    assert old["ledger_id"] == old_id
+    assert "provenance" not in old["cases"][0]

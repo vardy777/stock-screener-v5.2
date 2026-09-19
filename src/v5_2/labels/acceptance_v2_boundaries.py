@@ -17,6 +17,8 @@ from v5_2.labels.acceptance_v2_contracts import (
     BoundaryExecutionV2,
     BoundaryExecutionV2_1,
     EvidenceClass,
+    FailClosedBoundaryLedgerV2_1,
+    Phase2AAcceptanceArchitectureAmendmentV2_1,
 )
 from v5_2.labels.acceptance_v2_contracts import FailClosedBoundaryLedgerV2, Phase2AAcceptanceArchitectureAmendmentV2
 
@@ -331,3 +333,92 @@ def build_fail_closed_boundary_ledger(repository_root: Path, amendment: Phase2AA
     if any(case.engine_invocation_count for case in cases):
         raise ValueError("engine invoked for fail-closed case")
     return FailClosedBoundaryLedgerV2.create(amendment_id=amendment.artifact_id, cases=cases)
+
+
+def _deterministic_boundary_v2_1(
+    assembler: Phase2AEvidenceAssemblerV1,
+    slot,
+    *,
+    category: str,
+    code: str,
+    fault: str | None = None,
+    forbidden_domain: str | None = None,
+    invalid_lineage: bool = False,
+) -> BoundaryExecutionV2_1:
+    base = assembler.assemble(slot)
+    old = (
+        _invalid_lineage_case(assembler, slot)
+        if invalid_lineage
+        else _observed_case(
+            assembler=assembler,
+            slot=slot,
+            category=category,
+            code=code,
+            evidence_class=EvidenceClass.DETERMINISTIC_CONTRACT_FIXTURE,
+            fault=fault,
+            forbidden_domain=forbidden_domain,
+        )
+    )
+    transform_body = {
+        "schema_version": "DeterministicBoundaryTransformV2_1",
+        "semantic_category": category,
+        "base_bundle_id": base.content_hash,
+        "fault": fault,
+        "forbidden_domain": forbidden_domain,
+        "invalid_lineage": invalid_lineage,
+    }
+    transform_id = content_hash(transform_body)
+    transformed_id = content_hash({
+        "schema_version": "TransformedBoundaryEvidenceV2_1",
+        "base_bundle_id": base.content_hash,
+        "transform_id": transform_id,
+        "observed_rejection_code": old.observed_rejection_code,
+    })
+    provenance = BoundaryEvidenceProvenanceV2_1.create(
+        base_evidence_class="REAL_MARKET_EVIDENCE",
+        boundary_exercise_class="DETERMINISTIC_CONTRACT_FIXTURE",
+        real_condition_observed=False,
+        real_condition_availability="NOT_APPLICABLE",
+        unavailability_evidence_id=None,
+    )
+    return BoundaryExecutionV2_1.create(
+        semantic_category=category,
+        provenance=provenance,
+        input_evidence_ids=tuple(dict.fromkeys((*old.input_evidence_ids, base.content_hash, transform_id, transformed_id))),
+        real_base_bundle_id=base.content_hash,
+        real_base_lineage_ids=tuple(item.content_hash for item in base.domain_lineage),
+        transform_id=transform_id,
+        transformed_evidence_id=transformed_id,
+        removed_session=None,
+        rejection_boundary=old.rejection_boundary,
+        expected_rejection_code=old.expected_rejection_code,
+        observed_rejection_code=old.observed_rejection_code,
+        assembler_invocation_count=old.assembler_invocation_count,
+        engine_invocation_count=0,
+        observed_condition=None,
+    )
+
+
+def build_fail_closed_boundary_ledger_v2_1(
+    repository_root: Path,
+    amendment: Phase2AAcceptanceArchitectureAmendmentV2_1,
+) -> FailClosedBoundaryLedgerV2_1:
+    if not amendment.verify():
+        raise ValueError("invalid V2.1 amendment")
+    assembler = Phase2AEvidenceAssemblerV1(repository_root)
+    slot = build_frozen_inventory().slots[0]
+    cases = (
+        build_missing_bar_boundary_case_v2_1(repository_root, engine=object()),
+        build_unsupported_ca_boundary_case_v2_1(repository_root, engine=object()),
+        _deterministic_boundary_v2_1(assembler, slot, category="REVOKED_APPROVAL", code="REVOKED_APPROVAL", fault="REVOKED_APPROVAL"),
+        _deterministic_boundary_v2_1(assembler, slot, category="TAMPERED_ARTIFACT", code="TAMPERED_ARTIFACT", fault="TAMPERED_ARTIFACT"),
+        _deterministic_boundary_v2_1(assembler, slot, category="MISSING_REQUIRED_DOMAIN", code="MISSING_DOMAIN:calendar", forbidden_domain="calendar"),
+        _deterministic_boundary_v2_1(assembler, slot, category="AMBIGUOUS_IDENTITY", code="IDENTITY_AMBIGUITY", fault="IDENTITY_AMBIGUITY"),
+        _deterministic_boundary_v2_1(assembler, slot, category="MALFORMED_CALENDAR", code="MALFORMED_CALENDAR", fault="MALFORMED_CALENDAR"),
+        _deterministic_boundary_v2_1(assembler, slot, category="INVALID_LINEAGE", code="invalid domain lineage", invalid_lineage=True),
+        _deterministic_boundary_v2_1(assembler, slot, category="ROLE_SWAP", code="ROLE_SWAP", fault="ROLE_SWAP"),
+        _deterministic_boundary_v2_1(assembler, slot, category="DUPLICATE_DOMAIN", code="DUPLICATE_DOMAIN", fault="DUPLICATE_DOMAIN"),
+    )
+    if any(case.engine_invocation_count != 0 for case in cases):
+        raise ValueError("engine invoked for V2.1 fail-closed case")
+    return FailClosedBoundaryLedgerV2_1.create(amendment_id=amendment.artifact_id, cases=cases)
