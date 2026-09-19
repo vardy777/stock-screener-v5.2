@@ -2,10 +2,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from dataclasses import replace
+from datetime import date, datetime, time, timedelta, timezone
+import json
 from pathlib import Path
 
+from v5_2.data.corporate_action_facts import ActionType
+from v5_2.data.corporate_action_repository import CorporateActionRepository, NotResearchSafeError
 from v5_2.data.identity import content_hash
 from v5_2.data.label_evidence_assembler import EvidenceAssemblyError, Phase2AEvidenceAssemblerV1
+from v5_2.data.real_audits.corporate_action_validation import verify_content_addressed_artifact
 from v5_2.labels.acceptance import build_frozen_inventory
 from v5_2.labels.acceptance_v2_contracts import (
     BoundaryEvidenceProvenanceV2_1,
@@ -20,6 +25,11 @@ CA_MANIFEST_ID = "5086896d0066baa928fe44c3469b2c1362feb2068db04acb7336b38c13bdbe
 SUPPORTED_ACTION_TYPES = ("BONUS_SHARE", "CASH_DIVIDEND")
 UNSUPPORTED_ACTION_TYPES = ("RIGHTS_ISSUE", "SHARE_CONVERSION", "STOCK_SPLIT")
 CHECKPOINT8_DISCOVERY_ID = "947a8cd54a0a9a9bf91a8a4b45e7b502c272fb8dff374eab19b99615fca98f48"
+CA_APPROVAL_ID_V2_1 = "5e53080fd85dba5328cda9ed44c5dc5959e5bea965d8f5df12e07201deb8e974"
+CA_MANIFEST_ID_V2_1 = "5086896d0066baa928fe44c3469b2c1362feb2068db04acb7336b38c13bdbe2c"
+CA_MATERIALIZATION_AUDIT_ID_V2_1 = "8cf46a3dbaf6170cd64a1f2514f47ea87609200886fb2d8eebf60f888b11d28d"
+CA_CANDIDATE_BUNDLE_ID_V2_1 = "e36c885b4ad5a666a829bc56eba0ba455cb26c1fae2cd321748d14908c67d16d"
+CA_QUARANTINE_ID_V2_1 = "000c9bb50f41b1ad603bb4367f1bf7eb5c6506557d323c2356baa00a12a3f7c6"
 
 
 def create_remove_future_bar_transform_v2_1(
@@ -86,6 +96,108 @@ def build_missing_bar_boundary_case_v2_1(repository_root: Path, *, engine: objec
         observed_rejection_code=observed,
         assembler_invocation_count=1,
         engine_invocation_count=0,
+        observed_condition=None,
+    )
+
+
+def _verified_approval_v2_1(value: dict, expected: str) -> None:
+    if value.get("approval_id") != expected or value.get("content_hash") != expected:
+        raise ValueError("unsupported CA pinned provenance mismatch")
+    body = {key: item for key, item in value.items() if key not in {"approval_id", "content_hash"}}
+    if content_hash({"schema_version": "SourceApprovalArtifactV1", **body}) != expected:
+        raise ValueError("unsupported CA pinned provenance mismatch")
+
+
+def build_unsupported_ca_boundary_case_v2_1(repository_root: Path, *, engine: object) -> BoundaryExecutionV2_1:
+    governance = repository_root / "data/phase_1b2c/governance"
+    staging = repository_root / "data/phase_1b2c/staging"
+    try:
+        approval = json.loads((governance / f"corporate_action-approval-{CA_APPROVAL_ID_V2_1}.json").read_text(encoding="utf-8"))
+        manifest = json.loads((governance / f"corporate-action-manifest-{CA_MANIFEST_ID_V2_1}.json").read_text(encoding="utf-8"))
+        audit = json.loads((governance / f"materialization-audit-{CA_MATERIALIZATION_AUDIT_ID_V2_1}.json").read_text(encoding="utf-8"))
+        candidate = json.loads((staging / f"candidate-facts-{CA_CANDIDATE_BUNDLE_ID_V2_1}.json").read_text(encoding="utf-8"))
+        _verified_approval_v2_1(approval, CA_APPROVAL_ID_V2_1)
+        _verify_manifest(manifest)
+        if not verify_content_addressed_artifact(
+            audit, identity_field="audit_id", expected_identity=CA_MATERIALIZATION_AUDIT_ID_V2_1,
+        ):
+            raise ValueError("audit identity mismatch")
+        if not verify_content_addressed_artifact(
+            candidate, identity_field="candidate_bundle_id", expected_identity=CA_CANDIDATE_BUNDLE_ID_V2_1,
+        ):
+            raise ValueError("candidate identity mismatch")
+        if audit.get("candidate_bundle_id") != CA_CANDIDATE_BUNDLE_ID_V2_1:
+            raise ValueError("candidate lineage mismatch")
+        event = next(item for item in audit["quarantines"] if item.get("quarantine_id") == CA_QUARANTINE_ID_V2_1)
+        expected_event = {
+            "security_identity": "002029.SZ",
+            "effective_date": "20120508",
+            "reason": "UNSUPPORTED_SHARE_CONVERSION",
+            "quarantine_id": CA_QUARANTINE_ID_V2_1,
+        }
+        if event != expected_event:
+            raise ValueError("quarantine event mismatch")
+    except (FileNotFoundError, KeyError, StopIteration, TypeError, json.JSONDecodeError, ValueError) as error:
+        raise ValueError("unsupported CA pinned provenance mismatch") from error
+
+    def intervals(name: str):
+        return tuple(
+            (kind, date.fromisoformat(start), date.fromisoformat(end))
+            for kind, start, end in manifest[name]
+        )
+
+    repository = CorporateActionRepository(
+        facts=(),
+        supported_action_types=tuple(manifest["supported_action_types"]),
+        validated_coverage=intervals("validated_coverage_by_action_type"),
+        materialized_coverage=intervals("materialized_coverage_by_action_type"),
+        quarantined_security_periods=(("002029.SZ", date(2012, 5, 8), date(2012, 5, 8)),),
+        approval_valid=True,
+        manifest_valid=True,
+    )
+    try:
+        repository.query(
+            "002029.SZ",
+            date(2012, 5, 8),
+            date(2012, 5, 8),
+            ActionType.SHARE_CONVERSION,
+            datetime.combine(date(2012, 5, 8), time(16, 30), timezone(timedelta(hours=8))),
+        )
+    except NotResearchSafeError as error:
+        observed = str(error)
+    else:
+        raise ValueError("unsupported CA repository boundary did not reject")
+    expected = "NOT_RESEARCH_SAFE: unsupported action type"
+    if observed != expected:
+        raise ValueError("unsupported CA rejection contract changed")
+    provenance = BoundaryEvidenceProvenanceV2_1.create(
+        base_evidence_class="REAL_MACHINE_VISIBLE_UNSUPPORTED_SCOPE",
+        boundary_exercise_class="REAL_UNSUPPORTED_MARKET_EVENT",
+        real_condition_observed=True,
+        real_condition_availability="OBSERVED",
+        unavailability_evidence_id=None,
+    )
+    return BoundaryExecutionV2_1.create(
+        semantic_category="UNSUPPORTED_CA",
+        provenance=provenance,
+        input_evidence_ids=(
+            CA_APPROVAL_ID_V2_1,
+            CA_MANIFEST_ID_V2_1,
+            CA_MATERIALIZATION_AUDIT_ID_V2_1,
+            CA_CANDIDATE_BUNDLE_ID_V2_1,
+            CA_QUARANTINE_ID_V2_1,
+        ),
+        real_base_bundle_id=None,
+        real_base_lineage_ids=(),
+        transform_id=None,
+        transformed_evidence_id=None,
+        removed_session=None,
+        rejection_boundary="CorporateActionRepository.query",
+        expected_rejection_code=expected,
+        observed_rejection_code=observed,
+        assembler_invocation_count=0,
+        engine_invocation_count=0,
+        observed_condition=("002029.SZ", "2012-05-08", "UNSUPPORTED_SHARE_CONVERSION"),
     )
 
 

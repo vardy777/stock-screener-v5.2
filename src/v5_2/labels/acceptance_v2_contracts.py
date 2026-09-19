@@ -84,6 +84,7 @@ class BoundaryExecutionV2_1:
     observed_rejection_code: str
     assembler_invocation_count: int
     engine_invocation_count: int
+    observed_condition: tuple[str, str, str] | None
     content_hash: str
 
     @classmethod

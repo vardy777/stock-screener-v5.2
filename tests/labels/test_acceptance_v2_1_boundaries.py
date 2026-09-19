@@ -7,6 +7,7 @@ from v5_2.data.label_evidence_assembler import Phase2AEvidenceAssemblerV1
 from v5_2.labels.acceptance import build_frozen_inventory
 from v5_2.labels.acceptance_v2_boundaries import (
     build_missing_bar_boundary_case_v2_1,
+    build_unsupported_ca_boundary_case_v2_1,
     create_remove_future_bar_transform_v2_1,
 )
 
@@ -72,3 +73,49 @@ def test_missing_bar_transform_rejects_every_out_of_scope_mutation(changed_compo
             removed_session=removed,
             changed_components=changed_components,
         )
+
+
+def test_unsupported_ca_revalidates_pins_and_executes_repository_boundary():
+    engine = ForbiddenEngine()
+    result = build_unsupported_ca_boundary_case_v2_1(ROOT, engine=engine)
+    assert result.verify()
+    assert result.provenance.base_evidence_class == "REAL_MACHINE_VISIBLE_UNSUPPORTED_SCOPE"
+    assert result.provenance.boundary_exercise_class == "REAL_UNSUPPORTED_MARKET_EVENT"
+    assert result.provenance.real_condition_observed is True
+    assert result.observed_condition == (
+        "002029.SZ",
+        "2012-05-08",
+        "UNSUPPORTED_SHARE_CONVERSION",
+    )
+    assert result.rejection_boundary == "CorporateActionRepository.query"
+    assert result.expected_rejection_code == "NOT_RESEARCH_SAFE: unsupported action type"
+    assert result.observed_rejection_code == result.expected_rejection_code
+    assert result.assembler_invocation_count == 0
+    assert result.engine_invocation_count == engine.calls == 0
+    assert "ACCEPTANCE_ONLY_CA_PREFLIGHT" not in result.rejection_boundary
+    assert result.real_base_bundle_id is None
+    assert result.real_base_lineage_ids == ()
+
+
+@pytest.mark.parametrize(
+    "constant",
+    [
+        "CA_APPROVAL_ID_V2_1",
+        "CA_MANIFEST_ID_V2_1",
+        "CA_MATERIALIZATION_AUDIT_ID_V2_1",
+        "CA_CANDIDATE_BUNDLE_ID_V2_1",
+        "CA_QUARANTINE_ID_V2_1",
+    ],
+)
+def test_unsupported_ca_stops_on_any_changed_pin(monkeypatch, constant):
+    import v5_2.labels.acceptance_v2_boundaries as boundaries
+
+    monkeypatch.setattr(boundaries, constant, "0" * 64)
+    with pytest.raises(ValueError, match="unsupported CA pinned provenance"):
+        boundaries.build_unsupported_ca_boundary_case_v2_1(ROOT, engine=ForbiddenEngine())
+
+
+def test_acceptance_only_preflight_cannot_satisfy_v2_1_unsupported_ca():
+    result = build_unsupported_ca_boundary_case_v2_1(ROOT, engine=ForbiddenEngine())
+    assert result.rejection_boundary == "CorporateActionRepository.query"
+    assert result.rejection_boundary != "ACCEPTANCE_ONLY_CA_PREFLIGHT"
