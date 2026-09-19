@@ -12,6 +12,7 @@ from v5_2.labels.acceptance_v2_contracts import EvidenceClass
 
 ROOT = Path(__file__).resolve().parents[2]
 MANIFEST_ID = "5086896d0066baa928fe44c3469b2c1362feb2068db04acb7336b38c13bdbe2c"
+pytestmark = pytest.mark.skipif(not (ROOT / "data/phase_1b2c/governance").is_dir(), reason="immutable evidence excluded")
 
 
 class ForbiddenEngine:

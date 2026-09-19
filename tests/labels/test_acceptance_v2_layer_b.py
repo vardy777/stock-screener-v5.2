@@ -1,12 +1,15 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from v5_2.labels.acceptance_v2_boundaries import build_fail_closed_boundary_ledger
 from v5_2.labels.acceptance_v2_contracts import build_frozen_amendment_v2
 
 
 ROOT = Path(__file__).resolve().parents[2]
 MANIFEST_ID = "5086896d0066baa928fe44c3469b2c1362feb2068db04acb7336b38c13bdbe2c"
+pytestmark = pytest.mark.skipif(not (ROOT / "data/phase_1b2c/governance").is_dir(), reason="immutable evidence excluded")
 EXPECTED = (
     "UNEXPLAINED_MISSING_BAR", "UNSUPPORTED_CA", "REVOKED_APPROVAL",
     "TAMPERED_ARTIFACT", "MISSING_REQUIRED_DOMAIN", "AMBIGUOUS_IDENTITY",

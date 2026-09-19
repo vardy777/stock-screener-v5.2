@@ -3,6 +3,8 @@ import json
 from dataclasses import replace
 from pathlib import Path
 
+import pytest
+
 from v5_2.data.label_evidence_assembler import Phase2AEvidenceAssemblerV1
 from v5_2.labels.acceptance import ACCEPTANCE_GATES, build_frozen_inventory
 from v5_2.labels.acceptance_v2_boundaries import build_fail_closed_boundary_ledger
@@ -14,6 +16,7 @@ from v5_2.labels.acceptance_v2_resolver import resolve_phase2a_acceptance_v2
 
 ROOT = Path(__file__).resolve().parents[2]
 CA = "5086896d0066baa928fe44c3469b2c1362feb2068db04acb7336b38c13bdbe2c"
+pytestmark = pytest.mark.skipif(not (ROOT / "data/phase_2a/reference").is_dir(), reason="immutable evidence excluded")
 
 
 def artifacts():
