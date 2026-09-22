@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 from typing import Iterable
 
-from v5_2.labels.dataset_contracts import LabelPartitionV1, LabelRowV1
+from v5_2.labels.dataset_contracts import LabelDatasetManifestV1, LabelPartitionV1, LabelRowV1
 
 
 class ImmutableArtifactCollision(RuntimeError):
@@ -75,3 +75,31 @@ def read_partition_exact(path: Path, expected_id: str) -> LabelPartitionV1:
     if partition.partition_id != expected_id or not partition.verify():
         raise ValueError("canonical partition metadata invalid")
     return partition
+
+
+def write_manifest(root: Path, manifest: LabelDatasetManifestV1) -> Path:
+    if not manifest.verify():
+        raise ValueError("verified manifest required")
+    path = root / "manifests" / f"{manifest.manifest_id}.json"
+    _write_identical(path, _canonical(manifest))
+    return path
+
+
+def read_manifest_exact(path: Path, expected_id: str) -> LabelDatasetManifestV1:
+    if path.stem != expected_id:
+        raise ValueError("expected manifest ID does not match path")
+    try:
+        values = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError("canonical manifest unavailable") from exc
+    manifest = LabelDatasetManifestV1(
+        previous_manifest_id=values["previous_manifest_id"],
+        active_partition_ids=tuple(values["active_partition_ids"]),
+        partition_supersession=tuple(tuple(item) for item in values["partition_supersession"]),
+        phase2a_acceptance_id=values["phase2a_acceptance_id"],
+        lineage_ids=tuple(values["lineage_ids"]),
+        manifest_id=values["manifest_id"],
+    )
+    if manifest.manifest_id != expected_id or not manifest.verify():
+        raise ValueError("canonical manifest invalid")
+    return manifest
