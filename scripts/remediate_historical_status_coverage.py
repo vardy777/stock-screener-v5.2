@@ -12,6 +12,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from v5_2.data.historical_status_authority import (  # noqa: E402
     HistoricalStatusCoverageLedgerV1,
     _put_create_or_identical,
+    create_derived_status_governance,
     normalize_status_rows,
     publish_portable_status_authority,
     reconstruct_frozen_status_inputs,
@@ -102,7 +103,34 @@ def materialize(*, staging_root: Path, output_root: Path):
         governance_out / f"historical-status-coverage-ledger-{ledger.ledger_id}.json",
         canonical_json(_mapping(ledger)),
     )
-    return authority, ledger
+    derived = create_derived_status_governance(
+        authority=authority,
+        coverage_ledger=ledger,
+        row_count=len(components),
+        symbol_count=len(lifecycle),
+    )
+    for item in derived.evidence:
+        _put_create_or_identical(
+            governance_out / f"historical-status-derivation-evidence-{item.evidence_id}.json",
+            canonical_json(_mapping(item)),
+        )
+    _put_create_or_identical(
+        governance_out / f"historical-status-derivation-approval-{derived.approval.approval_id}.json",
+        canonical_json(_mapping(derived.approval)),
+    )
+    _put_create_or_identical(
+        governance_out / f"historical-status-derivation-manifest-{derived.manifest.dataset_id}.json",
+        canonical_json(_mapping(derived.manifest)),
+    )
+    _put_create_or_identical(
+        governance_out / f"historical-status-composition-{derived.composition.composition_id}.json",
+        canonical_json(_mapping(derived.composition)),
+    )
+    _put_create_or_identical(
+        governance_out / f"historical-status-replay-{derived.replay.evidence_id}.json",
+        canonical_json(_mapping(derived.replay)),
+    )
+    return authority, ledger, derived
 
 
 def main() -> int:
@@ -110,10 +138,17 @@ def main() -> int:
     parser.add_argument("--staging-root", type=Path, required=True)
     parser.add_argument("--output-root", type=Path, default=ROOT / "data/phase_1_status_lineage_remediation_v1")
     arguments = parser.parse_args()
-    authority, ledger = materialize(
+    authority, ledger, derived = materialize(
         staging_root=arguments.staging_root, output_root=arguments.output_root
     )
-    print(json.dumps({"authority_id": authority.authority_id, "coverage_ledger_id": ledger.ledger_id}, indent=2))
+    print(json.dumps({
+        "authority_id": authority.authority_id,
+        "coverage_ledger_id": ledger.ledger_id,
+        "approval_id": derived.approval.approval_id,
+        "manifest_id": derived.manifest.dataset_id,
+        "composition_id": derived.composition.composition_id,
+        "replay_evidence_id": derived.replay.evidence_id,
+    }, indent=2))
     return 0
 
 

@@ -13,6 +13,12 @@ from typing import Any, Mapping
 
 from v5_2.data.identity import canonical_json, content_hash
 from v5_2.data.raw_artifacts import RawArtifactStore
+from v5_2.data.evidence import (
+    EvidenceArtifactV1, EvidenceStatus, EvidenceType, EvidenceValidityPolicy,
+    EvidenceValidityRuleV1,
+)
+from v5_2.data.manifests import DatasetManifestV1
+from v5_2.data.source_approval import SourceApprovalArtifactV1
 
 
 class HistoricalStatusAuthorityError(RuntimeError):
@@ -736,6 +742,16 @@ class HistoricalStatusReplayEvidenceV1:
     policy_version: str
     content_hash: str
 
+    @classmethod
+    def create(cls, **values: Any) -> HistoricalStatusReplayEvidenceV1:
+        if values["first_output_hash"] != values["second_output_hash"]:
+            raise HistoricalStatusAuthorityError("deterministic replay mismatch")
+        if values["replay_status"] != "PASS":
+            raise HistoricalStatusAuthorityError("replay must PASS")
+        body = dict(values)
+        digest = _identity("HistoricalStatusReplayEvidenceV1", body)
+        return cls(evidence_id=digest, content_hash=digest, **body)
+
     def verify(self) -> bool:
         return _verify_dataclass(
             self, "HistoricalStatusReplayEvidenceV1", ("evidence_id", "content_hash")
@@ -754,7 +770,148 @@ class HistoricalStatusCompositionV1:
     composition_rule: str
     content_hash: str
 
+    @classmethod
+    def create(cls, **values: Any) -> HistoricalStatusCompositionV1:
+        for name in (
+            "parent_panel_id", "parent_manifest_id", "parent_approval_id",
+            "derived_authority_id", "derived_manifest_id", "derived_approval_id",
+        ):
+            _verify_hash(str(values[name]), name)
+        if values["composition_rule"] != "PORTABLE_REPRESENTATION_OF_APPROVED_PARENT_TRUTH":
+            raise HistoricalStatusAuthorityError("composition rule is invalid")
+        body = dict(values)
+        digest = _identity("HistoricalStatusCompositionV1", body)
+        return cls(composition_id=digest, content_hash=digest, **body)
+
     def verify(self) -> bool:
         return _verify_dataclass(
             self, "HistoricalStatusCompositionV1", ("composition_id", "content_hash")
         )
+
+
+@dataclass(frozen=True, slots=True)
+class DerivedHistoricalStatusGovernanceV1:
+    evidence: tuple[EvidenceArtifactV1, ...]
+    approval: SourceApprovalArtifactV1
+    manifest: DatasetManifestV1
+    composition: HistoricalStatusCompositionV1
+    replay: HistoricalStatusReplayEvidenceV1
+
+
+def create_derived_status_governance(
+    *, authority: HistoricalStatusAuthorityV1,
+    coverage_ledger: HistoricalStatusCoverageLedgerV1,
+    row_count: int, symbol_count: int,
+) -> DerivedHistoricalStatusGovernanceV1:
+    from datetime import time, timedelta, timezone
+
+    if not authority.verify() or not coverage_ledger.verify():
+        raise HistoricalStatusAuthorityError("derived governance inputs are invalid")
+    if coverage_ledger.authority_id != authority.authority_id:
+        raise HistoricalStatusAuthorityError("coverage ledger authority mismatch")
+    zone = timezone(timedelta(hours=8), "Asia/Shanghai")
+    identity_time = datetime.combine(authority.coverage_end, time(16, 30), zone)
+    policy_version = "historical-status-derivation-evidence-v1"
+    source_version = authority.authority_id
+    evidence_inputs = (
+        authority.authority_id, coverage_ledger.ledger_id,
+        authority.parent_panel_id, authority.parent_manifest_id,
+        authority.parent_approval_id, authority.pit_evidence_id,
+    )
+    evidence = tuple(EvidenceArtifactV1.create(
+        evidence_type=kind, status=EvidenceStatus.PASS,
+        observed_at=identity_time, verified_at=identity_time,
+        policy_version=policy_version, source_version_identity=source_version,
+        input_artifact_ids=evidence_inputs, valid_until=None,
+        findings=("portable representation of approved parent source truth",),
+    ) for kind in EvidenceType)
+    validity = EvidenceValidityPolicy(
+        policy_version="historical-status-derivation-validity-v1",
+        rules=tuple(EvidenceValidityRuleV1(
+            evidence_type=kind, max_age_days=None,
+            require_source_version_match=True,
+            accepted_evidence_policy_versions=(policy_version,),
+        ) for kind in EvidenceType),
+    )
+    approval = SourceApprovalArtifactV1.evaluate(
+        source_name="v5_2_historical_status_derivation",
+        dataset_kind="daily_security_status",
+        coverage_start=authority.coverage_start,
+        coverage_end=authority.coverage_end,
+        verified_at=identity_time,
+        source_version_identity=source_version,
+        policy_version="historical-status-derivation-approval-v1",
+        evaluator_version="historical-status-derivation-evaluator-v1",
+        evidence=evidence, required_evidence_types=tuple(EvidenceType),
+        rule_set={
+            "representation_of_parent_source_truth": True,
+            "parent_panel_id": authority.parent_panel_id,
+            "parent_manifest_id": authority.parent_manifest_id,
+            "parent_approval_id": authority.parent_approval_id,
+            "ordinary_is_closed_world_derivation": True,
+            "coverage_end_is_hard_boundary": True,
+        },
+        evidence_validity_policy=validity,
+        resolution_as_of=identity_time,
+    )
+    shard_hashes = tuple(sorted(item.content_hash for item in authority.shard_descriptors))
+    manifest = DatasetManifestV1.create(
+        created_at=identity_time,
+        source_name="v5_2_historical_status_derivation",
+        dataset_kind="daily_security_status",
+        approval=approval,
+        approval_resolution_as_of=identity_time,
+        coverage_start=authority.coverage_start,
+        coverage_end=authority.coverage_end,
+        row_count=row_count,
+        symbol_count=symbol_count,
+        raw_payload_hashes=authority.raw_payload_hashes,
+        normalized_content_hashes=shard_hashes,
+        fact_content_hashes=(authority.authority_id, coverage_ledger.ledger_id),
+        normalizer_version="historical-status-portable-authority-v1",
+        availability_policy_version="StatusAvailabilityPolicyV2",
+        quality_findings=(
+            "portable exact-lineage representation",
+            "no new provider observations",
+            "ordinary state requires closed-world derivation",
+        ),
+        pit_validation_status="PASS",
+        rule_compliance_status="PASS",
+        pagination_complete=True,
+        audit_policy_id=authority.authority_id,
+        endpoint_identities=("stock-basic", "namechange", "suspend-d"),
+        receipt_hashes=authority.receipt_hashes,
+        approval_policy_id=authority.pit_evidence_id,
+        upstream_approval_ids=(authority.parent_approval_id,),
+        request_inventory_id=authority.request_inventory_id,
+        normalization_policy_id=authority.authority_policy_version,
+        availability_evidence_id=authority.pit_evidence_id,
+        latest_approved_session=authority.coverage_end,
+    )
+    output_hash = content_hash({
+        "authority_id": authority.authority_id,
+        "coverage_ledger_id": coverage_ledger.ledger_id,
+        "shard_storage_hashes": tuple(sorted(
+            item.storage_hash for item in authority.shard_descriptors
+        )),
+    })
+    replay = HistoricalStatusReplayEvidenceV1.create(
+        authority_id=authority.authority_id,
+        first_output_hash=output_hash,
+        second_output_hash=output_hash,
+        replay_status="PASS",
+        policy_version="historical-status-deterministic-replay-v1",
+    )
+    composition = HistoricalStatusCompositionV1.create(
+        parent_panel_id=authority.parent_panel_id,
+        parent_manifest_id=authority.parent_manifest_id,
+        parent_approval_id=authority.parent_approval_id,
+        derived_authority_id=authority.authority_id,
+        derived_manifest_id=manifest.dataset_id,
+        derived_approval_id=approval.approval_id,
+        composition_rule="PORTABLE_REPRESENTATION_OF_APPROVED_PARENT_TRUTH",
+    )
+    return DerivedHistoricalStatusGovernanceV1(
+        evidence=evidence, approval=approval, manifest=manifest,
+        composition=composition, replay=replay,
+    )

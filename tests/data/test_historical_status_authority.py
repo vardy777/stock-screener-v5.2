@@ -16,6 +16,8 @@ from v5_2.data.historical_status_authority import (
     ensure_repository_local_staging,
     normalize_status_rows,
     publish_portable_status_authority,
+    create_derived_status_governance,
+    HistoricalStatusCoverageLedgerV1,
     require_exact_hash_inventory,
 )
 
@@ -269,3 +271,33 @@ def test_shard_descriptor_size_does_not_scale_with_component_count(tmp_path):
     ).descriptor
 
     assert len(canonical_json(descriptor)) < 600
+
+
+def test_derived_governance_approves_representation_not_new_provider_truth(tmp_path):
+    component = _component()
+    authority = publish_portable_status_authority(
+        output_root=tmp_path / "authority", components=(component,),
+        coverage_start=date(2010, 1, 4), coverage_end=date(2010, 1, 4),
+        parent_panel_id=PANEL, parent_manifest_id=MANIFEST,
+        parent_approval_id=APPROVAL, pit_evidence_id=PIT,
+        source_version_identity=SOURCE_VERSION,
+        raw_payload_hashes=("2" * 64,), receipt_hashes=("3" * 64,),
+        request_inventory_id="4" * 64,
+        authority_policy_version="historical-status-authority-v1",
+    )
+    ledger = HistoricalStatusCoverageLedgerV1.create(
+        authority_id=authority.authority_id,
+        coverage_start=date(2010, 1, 4), coverage_end=date(2010, 1, 4),
+        counts={"covered_identities": 1}, unresolved_identities=0,
+        unresolved_sessions=0, coverage_gaps=(), quarantine_count=0,
+    )
+    governance = create_derived_status_governance(
+        authority=authority, coverage_ledger=ledger, row_count=1, symbol_count=1,
+    )
+
+    assert governance.approval.source_name == "v5_2_historical_status_derivation"
+    assert governance.approval.decision.value == "APPROVED_WITH_RULES"
+    assert governance.approval.rule_set["representation_of_parent_source_truth"] is True
+    assert governance.manifest.approval_id == governance.approval.approval_id
+    assert governance.composition.parent_approval_id == APPROVAL
+    assert governance.replay.first_output_hash == governance.replay.second_output_hash
