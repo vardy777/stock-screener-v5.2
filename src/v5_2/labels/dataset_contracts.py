@@ -6,7 +6,9 @@ from decimal import Decimal
 import re
 
 from v5_2.data.identity import content_hash
-from v5_2.labels.contracts import CORE_LABELS, LabelInputBundleV1, LabelResultV1, LabelValueV1
+from v5_2.labels.contracts import (
+    CORE_LABELS, LabelInputBundleV1, LabelResultV1, LabelState, LabelValueV1,
+)
 
 
 _MONTH = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
@@ -160,3 +162,86 @@ class LabelDatasetManifestV1:
     def verify(self) -> bool:
         body = {name: getattr(self, name) for name in ("previous_manifest_id", "active_partition_ids", "partition_supersession", "phase2a_acceptance_id", "lineage_ids")}
         return self.manifest_id == _digest(type(self).__name__, body)
+
+
+@dataclass(frozen=True, slots=True)
+class CoverageAccountingV1:
+    effective_anchors: int
+    eligible_anchors: int
+    excluded_before_label: int
+    materialized_rows: int
+    state_counts: dict[str, dict[str, int]]
+    reason_counts: dict[str, int]
+    exclusion_reason_counts: dict[str, int]
+    disposition_set_hash: str
+    row_semantic_set_hash: str
+    content_hash: str
+
+    @classmethod
+    def from_dispositions(cls, dispositions, rows) -> "CoverageAccountingV1":
+        dispositions = tuple(dispositions)
+        rows = tuple(rows)
+        if not all(row.verify() for row in rows):
+            raise ValueError("verified materialized rows required")
+        disposition_keys = tuple(
+            (item.canonical_security_identity, item.anchor_session) for item in dispositions
+        )
+        row_keys = tuple((item.canonical_security_identity, item.anchor_session) for item in rows)
+        if len(disposition_keys) != len(set(disposition_keys)) or len(row_keys) != len(set(row_keys)):
+            raise ValueError("duplicate coverage key")
+        eligible_keys = {
+            (item.canonical_security_identity, item.anchor_session)
+            for item in dispositions if item.disposition.value == "ELIGIBLE"
+        }
+        if set(row_keys) != eligible_keys:
+            raise ValueError("eligible anchors and materialized rows differ")
+        state_counts = {
+            label: {state.value: 0 for state in LabelState} for label in CORE_LABELS
+        }
+        reason_counts: dict[str, int] = {}
+        for row in rows:
+            for value in row.values:
+                state_counts[value.label_name][value.state.value] += 1
+                if value.reason_code is not None:
+                    reason_counts[value.reason_code.value] = reason_counts.get(value.reason_code.value, 0) + 1
+        exclusion_counts: dict[str, int] = {}
+        for item in dispositions:
+            if item.disposition.value == "EXCLUDED_BEFORE_LABEL":
+                if not item.reason:
+                    raise ValueError("excluded anchor reason required")
+                exclusion_counts[item.reason] = exclusion_counts.get(item.reason, 0) + 1
+        disposition_rows = tuple(sorted((
+            item.canonical_security_identity, item.anchor_session,
+            item.disposition.value, item.reason,
+        ) for item in dispositions))
+        row_ids = tuple(row.row_id for row in sorted(
+            rows, key=lambda item: (item.anchor_session, item.canonical_security_identity)
+        ))
+        body = {
+            "effective_anchors": sum(bool(item.effective) for item in dispositions),
+            "eligible_anchors": len(eligible_keys),
+            "excluded_before_label": sum(
+                item.disposition.value == "EXCLUDED_BEFORE_LABEL" for item in dispositions
+            ),
+            "materialized_rows": len(rows),
+            "state_counts": state_counts,
+            "reason_counts": dict(sorted(reason_counts.items())),
+            "exclusion_reason_counts": dict(sorted(exclusion_counts.items())),
+            "disposition_set_hash": _digest("CoverageDispositionSetV1", {"rows": disposition_rows}),
+            "row_semantic_set_hash": _digest("CoverageRowSemanticSetV1", {"row_ids": row_ids}),
+        }
+        return cls(**body, content_hash=_digest(cls.__name__, body))
+
+    def verify(self) -> bool:
+        body = {field.name: getattr(self, field.name) for field in fields(self)
+                if field.name != "content_hash"}
+        return self.content_hash == _digest(type(self).__name__, body)
+
+    def verify_against(self, dispositions, rows) -> bool:
+        if not self.verify():
+            return False
+        try:
+            expected = type(self).from_dispositions(dispositions, rows)
+        except (TypeError, ValueError):
+            return False
+        return self == expected
