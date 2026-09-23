@@ -5,6 +5,8 @@ import hashlib
 
 import pytest
 
+from v5_2.data.identity import canonical_json
+
 from v5_2.data.historical_status_authority import (
     HistoricalStatusAuthorityError,
     HistoricalStatusAuthorityV1,
@@ -13,6 +15,7 @@ from v5_2.data.historical_status_authority import (
     HistoricalStatusResolverV1,
     ensure_repository_local_staging,
     normalize_status_rows,
+    publish_portable_status_authority,
     require_exact_hash_inventory,
 )
 
@@ -51,7 +54,7 @@ def test_deterministic_shard_bytes_are_canonical_gzip(tmp_path):
 
     assert first.compressed_bytes == second.compressed_bytes
     assert first.storage_hash == hashlib.sha256(first.compressed_bytes).hexdigest()
-    assert first.content_hash == "f042d9008c143868a4eb67365d43cd8898e115ed37eb9c3e74c576315443dc96"
+    assert first.content_hash == "c6a898193d4b08c5b549e36f8f4bd33d23f8b264b3ac5fff5a214e8a3e7f997b"
     assert gzip.decompress(first.compressed_bytes).startswith(b'{"component_kind":"LIFECYCLE"')
 
 
@@ -226,3 +229,43 @@ def test_resolver_fails_closed_outside_coverage_unknown_or_naive(tmp_path):
         resolver.resolve("UNKNOWN.SZ", date(2010, 1, 5), datetime(2010, 1, 5, 16, 30, tzinfo=ZONE))
     with pytest.raises(HistoricalStatusAuthorityError, match="timezone"):
         resolver.resolve("000001.SZ", date(2010, 1, 5), datetime(2010, 1, 5, 16, 30))
+
+
+def test_portable_authority_publication_is_byte_identical(tmp_path):
+    lifecycle, risk, suspension = normalize_status_rows(
+        lifecycle_rows=({"ts_code": "000001.SZ", "list_date": "20100104", "delist_date": None},),
+        namechange_rows=({"ts_code": "000001.SZ", "name": "ST测试", "start_date": "20100105", "end_date": "20100106", "ann_date": "20100104"},),
+        suspension_rows=({"ts_code": "000001.SZ", "trade_date": "20100106", "suspend_type": "S", "suspend_timing": ""},),
+    )
+    kwargs = dict(
+        components=lifecycle + risk + suspension,
+        coverage_start=date(2010, 1, 4), coverage_end=date(2010, 1, 8),
+        parent_panel_id=PANEL, parent_manifest_id=MANIFEST,
+        parent_approval_id=APPROVAL, pit_evidence_id=PIT,
+        source_version_identity=SOURCE_VERSION,
+        raw_payload_hashes=("2" * 64,), receipt_hashes=("3" * 64,),
+        request_inventory_id="4" * 64,
+        authority_policy_version="historical-status-authority-v1",
+    )
+    first = publish_portable_status_authority(output_root=tmp_path / "one", **kwargs)
+    second = publish_portable_status_authority(output_root=tmp_path / "two", **kwargs)
+
+    assert first.authority_id == second.authority_id
+    assert {
+        path.relative_to(tmp_path / "one"): path.read_bytes()
+        for path in (tmp_path / "one").rglob("*") if path.is_file()
+    } == {
+        path.relative_to(tmp_path / "two"): path.read_bytes()
+        for path in (tmp_path / "two").rglob("*") if path.is_file()
+    }
+
+
+def test_shard_descriptor_size_does_not_scale_with_component_count(tmp_path):
+    components = tuple(
+        _component(source_row_hash=f"{index:064x}") for index in range(1, 1001)
+    )
+    descriptor = HistoricalStatusShardStore(tmp_path).encode(
+        "LIFECYCLE", components
+    ).descriptor
+
+    assert len(canonical_json(descriptor)) < 600

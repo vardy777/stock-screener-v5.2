@@ -311,7 +311,7 @@ class HistoricalStatusComponentV1:
 @dataclass(frozen=True, slots=True)
 class HistoricalStatusShardV1:
     component_kind: str
-    component_ids: tuple[str, ...]
+    component_set_hash: str
     row_count: int
     content_hash: str
     storage_hash: str
@@ -320,12 +320,11 @@ class HistoricalStatusShardV1:
     def verify(self) -> bool:
         body = {
             "component_kind": self.component_kind,
-            "component_ids": self.component_ids,
+            "component_set_hash": self.component_set_hash,
             "row_count": self.row_count,
         }
         return (
             self.encoding == "canonical-json+gzip-mtime0-v1"
-            and self.row_count == len(self.component_ids)
             and self.content_hash == _identity("HistoricalStatusShardV1", body)
         )
 
@@ -371,7 +370,7 @@ class HistoricalStatusShardStore:
         component_ids = tuple(item.component_id for item in ordered)
         body = {
             "component_kind": component_kind,
-            "component_ids": component_ids,
+            "component_set_hash": content_hash(component_ids),
             "row_count": len(ordered),
         }
         shard_hash = _identity("HistoricalStatusShardV1", body)
@@ -485,6 +484,58 @@ class HistoricalStatusAuthorityV1:
         return _verify_dataclass(
             self, "HistoricalStatusAuthorityV1", ("authority_id", "content_hash")
         ) and all(item.verify() for item in self.shard_descriptors)
+
+
+def _put_create_or_identical(path: Path, content: bytes) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL)
+    except FileExistsError:
+        if path.read_bytes() != content:
+            raise HistoricalStatusAuthorityError("immutable artifact collision")
+        return path
+    with os.fdopen(descriptor, "wb") as stream:
+        stream.write(content)
+    return path
+
+
+def publish_portable_status_authority(
+    *, output_root: Path, components: tuple[HistoricalStatusComponentV1, ...],
+    coverage_start: date, coverage_end: date, parent_panel_id: str,
+    parent_manifest_id: str, parent_approval_id: str, pit_evidence_id: str,
+    source_version_identity: str, raw_payload_hashes: tuple[str, ...],
+    receipt_hashes: tuple[str, ...], request_inventory_id: str,
+    authority_policy_version: str,
+) -> HistoricalStatusAuthorityV1:
+    if not components:
+        raise HistoricalStatusAuthorityError("portable authority requires components")
+    grouped: dict[tuple[str, str], list[HistoricalStatusComponentV1]] = {}
+    for item in components:
+        if not item.verify():
+            raise HistoricalStatusAuthorityError("component identity mismatch")
+        bucket = item.canonical_security_identity[:2]
+        grouped.setdefault((item.component_kind, bucket), []).append(item)
+    store = HistoricalStatusShardStore(output_root / "shards")
+    descriptors = []
+    for key in sorted(grouped):
+        encoded = store.encode(key[0], tuple(grouped[key]))
+        store.put(encoded)
+        descriptors.append(encoded.descriptor)
+    authority = HistoricalStatusAuthorityV1.create(
+        coverage_start=coverage_start, coverage_end=coverage_end,
+        parent_panel_id=parent_panel_id, parent_manifest_id=parent_manifest_id,
+        parent_approval_id=parent_approval_id, pit_evidence_id=pit_evidence_id,
+        source_version_identity=source_version_identity,
+        raw_payload_hashes=raw_payload_hashes, receipt_hashes=receipt_hashes,
+        request_inventory_id=request_inventory_id,
+        shard_descriptors=tuple(descriptors),
+        authority_policy_version=authority_policy_version,
+    )
+    _put_create_or_identical(
+        output_root / f"historical-status-authority-{authority.authority_id}.json",
+        canonical_json(authority),
+    )
+    return authority
 
 
 @dataclass(frozen=True, slots=True)
@@ -659,6 +710,15 @@ class HistoricalStatusCoverageLedgerV1:
     coverage_gaps: tuple[str, ...]
     quarantine_count: int
     content_hash: str
+
+    @classmethod
+    def create(cls, **values: Any) -> HistoricalStatusCoverageLedgerV1:
+        counts = {key: int(values["counts"][key]) for key in sorted(values["counts"])}
+        if any(value < 0 for value in counts.values()):
+            raise HistoricalStatusAuthorityError("coverage count is negative")
+        body = {**values, "counts": counts, "coverage_gaps": tuple(values["coverage_gaps"])}
+        digest = _identity("HistoricalStatusCoverageLedgerV1", body)
+        return cls(ledger_id=digest, content_hash=digest, **body)
 
     def verify(self) -> bool:
         return _verify_dataclass(
