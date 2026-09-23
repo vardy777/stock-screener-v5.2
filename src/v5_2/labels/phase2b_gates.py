@@ -31,6 +31,11 @@ PHASE2B_GATES = (
     "CLEAN_ROOM_STANDALONE",
 )
 
+# V1 predicate envelopes are caller-authored hashes, not independent evidence.
+# They remain readable for the Checkpoint 18 hard-stop audit, but cannot
+# authorize formal acceptance, including the structural gates whose expected
+# pins are supplied by the same caller.
+
 _ID = re.compile(r"^[0-9a-f]{64}$")
 
 
@@ -151,26 +156,13 @@ def _structural_checks(inputs: Phase2BGateInputsV1) -> dict[str, bool]:
 
 def evaluate_phase2b_gates(inputs: Phase2BGateInputsV1) -> Phase2BGateEvaluationV1:
     evidence_by_gate = {item.gate: item for item in inputs.predicate_evidence}
-    complete_evidence = (
-        len(inputs.predicate_evidence) == len(PHASE2B_GATES)
-        and len(evidence_by_gate) == len(PHASE2B_GATES)
-        and tuple(item.gate for item in inputs.predicate_evidence) == PHASE2B_GATES
-    )
-    structural = _structural_checks(inputs)
     results: list[Phase2BGateResultV1] = []
     for gate in PHASE2B_GATES:
         evidence = evidence_by_gate.get(gate)
-        evidence_pass = bool(
-            complete_evidence
-            and evidence is not None
-            and evidence.verify()
-            and evidence.expected_hash == evidence.observed_hash
-        )
-        passed = evidence_pass and structural.get(gate, True)
         results.append(Phase2BGateResultV1(
             gate=gate,
-            status="PASS" if passed else "FAIL",
-            failure_code=None if passed else f"{gate}_FAILED",
+            status="FAIL",
+            failure_code=f"{gate}_FORMAL_EVIDENCE_MISSING",
             evidence_ids=() if evidence is None else evidence.evidence_ids,
         ))
     frozen = tuple(results)

@@ -42,11 +42,12 @@ def gate_fixture():
     )
 
 
-def test_all_eighteen_artifact_driven_predicates_pass():
+def test_equal_caller_hashes_cannot_establish_formal_semantic_pass():
     evaluation = evaluate_phase2b_gates(gate_fixture())
-    assert evaluation.all_pass
+    assert not evaluation.all_pass
     assert tuple(item.gate for item in evaluation.results) == PHASE2B_GATES
-    assert all(item.status == "PASS" and item.evidence_ids for item in evaluation.results)
+    assert all(item.status == "FAIL" and item.failure_code == f"{item.gate}_FORMAL_EVIDENCE_MISSING"
+               for item in evaluation.results)
 
 
 @pytest.mark.parametrize("gate", PHASE2B_GATES)
