@@ -112,6 +112,36 @@ def scan_phase1a_boundaries(root: Path) -> list[str]:
     return findings
 
 
+def scan_phase2b_firewall(root: Path) -> list[str]:
+    findings: list[str] = []
+    package = root / "src" / "v5_2"
+    feature_root = package / "features"
+    if feature_root.is_dir():
+        for path in feature_root.rglob("*.py"):
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            modules = _imported_modules(path)
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ImportFrom) and node.module == "v5_2":
+                    modules.update(f"v5_2.{alias.name}" for alias in node.names)
+            for module in sorted(modules):
+                if module == "v5_2.labels" or module.startswith("v5_2.labels."):
+                    findings.append(f"{path.relative_to(root)}: feature label boundary import {module}")
+    materialization_paths = tuple((package / "labels").rglob("*.py")) + (
+        package / "data" / "label_evidence_assembler.py",
+    )
+    for path in materialization_paths:
+        if not path.is_file():
+            continue
+        for module in sorted(_imported_modules(path)):
+            if module == "v5_2.providers" or module.startswith("v5_2.providers.") or (
+                module == "v5_2.integrations" or module.startswith("v5_2.integrations.")
+            ):
+                findings.append(
+                    f"{path.relative_to(root)}: materialization provider boundary import {module}"
+                )
+    return findings
+
+
 def scan_secret_leaks(root: Path, sentinels: tuple[str, ...]) -> list[str]:
     active_sentinels = tuple(value.encode("utf-8") for value in sentinels if value)
     if not active_sentinels:
@@ -176,6 +206,7 @@ def verify(root: Path) -> list[str]:
         + scan_active_paths(root)
         + scan_inventory(root)
         + scan_phase1a_boundaries(root)
+        + scan_phase2b_firewall(root)
     )
 
 
@@ -190,6 +221,7 @@ def main() -> int:
     print("PASS forbidden active paths/dependencies: 0")
     print("PASS prohibited repository inventory: 0")
     print("PASS phase 1a architecture boundary violations: 0")
+    print("PASS phase 2b feature label firewall violations: 0")
     return 0
 
 
