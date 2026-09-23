@@ -6,6 +6,8 @@ from decimal import Decimal
 from enum import Enum
 from pathlib import Path
 import re
+from time import perf_counter
+import tracemalloc
 from typing import Any
 
 from v5_2.data.historical_status_authority import HistoricalStatusResolverV1
@@ -21,8 +23,9 @@ from v5_2.labels.contracts import (
     LabelReferencePrice,
     ProvenancePath,
 )
-from v5_2.labels.dataset_contracts import LabelRowV1
+from v5_2.labels.dataset_contracts import LabelPartitionV1, LabelRowV1
 from v5_2.labels.engine import ReferenceLabelEngine
+from v5_2.labels.partition_store import write_partition
 
 
 _ID = re.compile(r"^[0-9a-f]{64}$")
@@ -144,6 +147,37 @@ class ExcludedAnchorV1:
         return cls(**body, content_hash=_digest(cls.__name__, body))
 
 
+@dataclass(frozen=True, slots=True)
+class YearMonthV1:
+    year: int
+    month: int
+
+    @classmethod
+    def create(cls, year: int, month: int) -> "YearMonthV1":
+        if year < 1990 or not 1 <= month <= 12:
+            raise ValueError("invalid year-month")
+        return cls(year, month)
+
+    @property
+    def key(self) -> str:
+        return f"{self.year:04d}-{self.month:02d}"
+
+
+@dataclass(frozen=True, slots=True)
+class MaterializationOperationalLedgerV1:
+    rows: int
+    canonical_bytes: int
+    elapsed_seconds: float
+    peak_rss_bytes: int
+
+
+@dataclass(frozen=True, slots=True)
+class MaterializedPartitionV1:
+    partition: LabelPartitionV1
+    path: Path
+    operational: MaterializationOperationalLedgerV1
+
+
 class HistoricalLabelEvidenceAssemblerV1:
     version = "historical-label-evidence-assembler-v1"
 
@@ -181,6 +215,12 @@ class HistoricalLabelEvidenceAssemblerV1:
         sessions = tuple(day for day in lineage.open_sessions if day > anchor.anchor_session)[:5]
         if len(sessions) != 5 or latest_completed_session not in (anchor.anchor_session, *sessions):
             raise ValueError("completed session is outside frozen horizon")
+        if any(item.session not in sessions for item in window.future_bars):
+            raise ValueError("evidence exceeds five-session look-ahead")
+        if any(day not in sessions for day, _, _ in window.dated_identity_map):
+            raise ValueError("identity evidence exceeds five-session look-ahead")
+        if any((item.effective_date or item.ex_date) not in sessions for item in window.corporate_actions):
+            raise ValueError("corporate-action evidence exceeds five-session look-ahead")
         completed = tuple(day for day in sessions if day <= latest_completed_session)
         derivations = tuple(self.status_resolver.resolve(
             anchor.canonical_security_identity, day,
@@ -268,3 +308,48 @@ def materialize_anchor(
     )
     result = ReferenceLabelEngine().evaluate(bundle)
     return LabelRowV1.create(result=result, bundle=bundle, materialization_version=version)
+
+
+def materialize_month(
+    root: Path,
+    month: YearMonthV1,
+    lineage_ids: tuple[str, ...],
+    version: str,
+    *,
+    rows,
+) -> MaterializedPartitionV1:
+    if not lineage_ids or not all(_ID.fullmatch(value) for value in lineage_ids):
+        raise ValueError("exact month lineage IDs required")
+    if not version:
+        raise ValueError("materialization version required")
+    started = perf_counter()
+    tracemalloc.start()
+    try:
+        materialized = tuple(rows)
+        if not materialized:
+            raise ValueError("month contains no materialized rows")
+        if any(
+            item.anchor_session.year != month.year or item.anchor_session.month != month.month
+            for item in materialized
+        ):
+            raise ValueError("row is outside anchor month")
+        generation_id = _digest("LabelPartitionGenerationV1", {
+            "partition_key": month.key,
+            "materialization_version": version,
+            "lineage_ids": lineage_ids,
+            "row_ids": tuple(item.row_id for item in materialized),
+        })
+        partition = LabelPartitionV1.create(
+            partition_key=month.key,
+            generation_id=generation_id,
+            rows=materialized,
+        )
+        path = write_partition(root, partition, materialized)
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+    operational = MaterializationOperationalLedgerV1(
+        rows=len(materialized), canonical_bytes=path.stat().st_size,
+        elapsed_seconds=perf_counter() - started, peak_rss_bytes=peak,
+    )
+    return MaterializedPartitionV1(partition, path, operational)

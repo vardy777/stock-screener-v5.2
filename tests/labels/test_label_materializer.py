@@ -25,6 +25,7 @@ from v5_2.labels.calculation import CorporateActionCoverageV1
 from v5_2.labels.contracts import (
     AnchorKnowledgeBoundary,
     DomainLineageV1,
+    LabelReasonCode,
     LabelState,
     ProvenancePath,
     REQUIRED_LABEL_DOMAINS,
@@ -33,8 +34,11 @@ from v5_2.labels.materializer import (
     HistoricalEvidenceWindowV1,
     HistoricalLabelEvidenceAssemblerV1,
     HistoricalStatusLineagePinsV1,
+    YearMonthV1,
     materialize_anchor,
+    materialize_month,
 )
+from tests.labels.test_phase2b_coverage import row as coverage_row
 
 
 ZONE = timezone(timedelta(hours=8))
@@ -210,3 +214,60 @@ def test_materializer_has_no_provider_or_network_dependency():
         for alias in node.names
     }
     assert not any("provider" in name or "integrations" in name for name in imports)
+
+
+def test_month_materializer_streams_canonical_rows_and_publishes_exact_partition(tmp_path):
+    consumed = []
+
+    def rows():
+        for item in (
+            coverage_row(1, LabelState.LABEL_AVAILABLE),
+            coverage_row(2, LabelState.LABEL_PENDING, LabelReasonCode.HORIZON_NOT_COMPLETED),
+        ):
+            consumed.append(item.row_id)
+            yield item
+
+    materialized = materialize_month(
+        tmp_path, YearMonthV1.create(2024, 1), (IDS[0], IDS[1]),
+        "phase2b-v1", rows=rows(),
+    )
+
+    assert consumed == list(materialized.partition.row_ids)
+    assert materialized.path.is_file()
+    assert materialized.operational.rows == 2
+    assert materialized.operational.canonical_bytes == materialized.path.stat().st_size
+    assert materialized.operational.elapsed_seconds >= 0
+    assert materialized.operational.peak_rss_bytes >= 0
+
+
+def test_month_materializer_does_not_publish_partial_partition_on_systemic_fault(tmp_path):
+    reversed_rows = (
+        coverage_row(2, LabelState.LABEL_AVAILABLE),
+        coverage_row(1, LabelState.LABEL_AVAILABLE),
+    )
+    with pytest.raises(ValueError, match="ordering"):
+        materialize_month(
+            tmp_path, YearMonthV1.create(2024, 1), (IDS[0],),
+            "phase2b-v1", rows=iter(reversed_rows),
+        )
+    assert not (tmp_path / "labels").exists()
+
+
+def test_assembler_rejects_evidence_outside_five_session_lookahead(tmp_path):
+    resolver = status_resolver(tmp_path)
+    assembler = HistoricalLabelEvidenceAssemblerV1(resolver, pins(resolver))
+    original = window()
+    oversized = HistoricalEvidenceWindowV1.create(
+        anchor_boundary=original.anchor_boundary,
+        anchor_bar=original.anchor_bar,
+        future_bars=(*original.future_bars, bar(date(2024, 1, 10), "20")),
+        non_status_lineage=original.non_status_lineage,
+        corporate_actions=original.corporate_actions,
+        action_coverage=original.action_coverage,
+        dated_identity_map=original.dated_identity_map,
+        delisting_session=original.delisting_session,
+    )
+    with pytest.raises(ValueError, match="look-ahead"):
+        assembler.assemble(
+            anchor(), lineage(), oversized, latest_completed_session=SESSIONS[-1],
+        )
