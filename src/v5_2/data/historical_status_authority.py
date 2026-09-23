@@ -563,6 +563,8 @@ class HistoricalStatusDerivationV1:
     availability_policy_id: str
     parent_approval_id: str
     parent_manifest_id: str
+    derived_approval_id: str
+    derived_manifest_id: str
     source_version_identity: str
     content_hash: str
 
@@ -599,6 +601,8 @@ class HistoricalStatusResolverV1:
         self, *, authority: HistoricalStatusAuthorityV1,
         components: tuple[HistoricalStatusComponentV1, ...],
         approved_sessions: tuple[date, ...], availability_policy_id: str,
+        derived_approval_id: str | None = None,
+        derived_manifest_id: str | None = None,
     ) -> None:
         if not authority.verify():
             raise HistoricalStatusAuthorityError("authority identity mismatch")
@@ -616,6 +620,8 @@ class HistoricalStatusResolverV1:
         self.components = components
         self.approved_sessions = approved_sessions
         self.availability_policy_id = availability_policy_id
+        self.derived_approval_id = derived_approval_id or authority.parent_approval_id
+        self.derived_manifest_id = derived_manifest_id or authority.parent_manifest_id
         self._lifecycles = {
             item.canonical_security_identity: item
             for item in components if item.component_kind == "LIFECYCLE"
@@ -624,13 +630,18 @@ class HistoricalStatusResolverV1:
             item.component_kind == "LIFECYCLE" for item in components
         ):
             raise HistoricalStatusAuthorityError("conflicting lifecycle identity")
-        self._by_identity: dict[str, tuple[HistoricalStatusComponentV1, ...]] = {}
-        for identity in self._lifecycles:
-            self._by_identity[identity] = tuple(
-                item for item in components
-                if item.canonical_security_identity == identity
-                and item.component_kind != "LIFECYCLE"
-            )
+        grouped: dict[str, list[HistoricalStatusComponentV1]] = {
+            identity: [] for identity in self._lifecycles
+        }
+        for item in components:
+            if item.component_kind == "LIFECYCLE":
+                continue
+            if item.canonical_security_identity not in grouped:
+                continue
+            grouped[item.canonical_security_identity].append(item)
+        self._by_identity = {
+            identity: tuple(values) for identity, values in grouped.items()
+        }
         self._closed_world = tuple(sorted(
             descriptor.content_hash for descriptor in authority.shard_descriptors
             if descriptor.component_kind != "LIFECYCLE"
@@ -671,7 +682,8 @@ class HistoricalStatusResolverV1:
             lifecycle.effective_to is None or session <= lifecycle.effective_to
         )
         delisted = lifecycle.effective_to is not None and session > lifecycle.effective_to
-        risks, suspensions = [], []
+        risks, suspension_lineage = [], []
+        full_day_suspended = False
         for item in self._by_identity[identity]:
             available_at = self._available_at(item)
             if available_at > cutoff:
@@ -681,8 +693,12 @@ class HistoricalStatusResolverV1:
                 and (item.effective_to is None or session <= item.effective_to)
             ):
                 risks.append(item.component_id)
-            if item.component_kind == "FULL_DAY_SUSPENSION" and item.event_session == session:
-                suspensions.append(item.component_id)
+            if item.component_kind in {
+                "FULL_DAY_SUSPENSION", "PARTIAL_SUSPENSION", "RESUMPTION"
+            } and item.event_session == session:
+                suspension_lineage.append(item.component_id)
+                if item.component_kind == "FULL_DAY_SUSPENSION":
+                    full_day_suspended = True
         return HistoricalStatusDerivationV1.create(
             authority_id=self.authority.authority_id,
             canonical_security_identity=identity,
@@ -691,17 +707,108 @@ class HistoricalStatusResolverV1:
             listed=listed,
             delisted=delisted,
             risk_warning=listed and bool(risks),
-            full_day_suspended=listed and bool(suspensions),
+            full_day_suspended=listed and full_day_suspended,
             lifecycle_component_id=lifecycle.component_id,
             applicable_risk_component_ids=tuple(risks),
-            applicable_suspension_component_ids=tuple(suspensions),
+            applicable_suspension_component_ids=tuple(suspension_lineage),
             closed_world_shard_ids=self._closed_world,
             available_at=session_available,
             availability_policy_id=self.availability_policy_id,
             parent_approval_id=self.authority.parent_approval_id,
             parent_manifest_id=self.authority.parent_manifest_id,
+            derived_approval_id=self.derived_approval_id,
+            derived_manifest_id=self.derived_manifest_id,
             source_version_identity=self.authority.source_version_identity,
         )
+
+
+def load_portable_status_resolver(
+    *, portable_root: Path, expected_authority_id: str,
+    expected_derived_approval_id: str, expected_derived_manifest_id: str,
+    expected_composition_id: str, expected_replay_evidence_id: str,
+    approved_sessions: tuple[date, ...], revoked_approval_ids: tuple[str, ...],
+) -> HistoricalStatusResolverV1:
+    authority_root = portable_root / "authority"
+    governance_root = portable_root / "governance"
+    authority_path = authority_root / f"historical-status-authority-{expected_authority_id}.json"
+    if not authority_path.is_file():
+        raise HistoricalStatusAuthorityError("exact authority artifact is missing")
+    raw = json.loads(authority_path.read_text(encoding="utf-8"))
+    raw["coverage_start"] = date.fromisoformat(raw["coverage_start"])
+    raw["coverage_end"] = date.fromisoformat(raw["coverage_end"])
+    raw["raw_payload_hashes"] = tuple(raw["raw_payload_hashes"])
+    raw["receipt_hashes"] = tuple(raw["receipt_hashes"])
+    raw["shard_descriptors"] = tuple(
+        HistoricalStatusShardV1(**item) for item in raw["shard_descriptors"]
+    )
+    authority = HistoricalStatusAuthorityV1(**raw)
+    if authority.authority_id != expected_authority_id or not authority.verify():
+        raise HistoricalStatusAuthorityError("authority identity mismatch")
+    revoked = set(revoked_approval_ids)
+    if authority.parent_approval_id in revoked or expected_derived_approval_id in revoked:
+        raise HistoricalStatusAuthorityError("status authority approval is revoked")
+
+    approval_path = governance_root / f"historical-status-derivation-approval-{expected_derived_approval_id}.json"
+    manifest_path = governance_root / f"historical-status-derivation-manifest-{expected_derived_manifest_id}.json"
+    composition_path = governance_root / f"historical-status-composition-{expected_composition_id}.json"
+    replay_path = governance_root / f"historical-status-replay-{expected_replay_evidence_id}.json"
+    if not all(path.is_file() for path in (
+        approval_path, manifest_path, composition_path, replay_path
+    )):
+        raise HistoricalStatusAuthorityError("exact derived governance is missing")
+    approval = json.loads(approval_path.read_text(encoding="utf-8"))
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    composition = json.loads(composition_path.read_text(encoding="utf-8"))
+    replay = json.loads(replay_path.read_text(encoding="utf-8"))
+    if not _stored_identity(approval, "SourceApprovalArtifactV1", ("approval_id", "content_hash")):
+        raise HistoricalStatusAuthorityError("derived approval identity mismatch")
+    if not _stored_identity(manifest, "DatasetManifestV1", ("dataset_id", "manifest_hash")):
+        raise HistoricalStatusAuthorityError("derived manifest identity mismatch")
+    if not _stored_identity(composition, "HistoricalStatusCompositionV1", ("composition_id", "content_hash")):
+        raise HistoricalStatusAuthorityError("composition identity mismatch")
+    if not _stored_identity(replay, "HistoricalStatusReplayEvidenceV1", ("evidence_id", "content_hash")):
+        raise HistoricalStatusAuthorityError("replay identity mismatch")
+    if approval["approval_id"] != expected_derived_approval_id or manifest["dataset_id"] != expected_derived_manifest_id:
+        raise HistoricalStatusAuthorityError("derived governance pin mismatch")
+    if composition["composition_id"] != expected_composition_id or replay["evidence_id"] != expected_replay_evidence_id:
+        raise HistoricalStatusAuthorityError("derived governance pin mismatch")
+    if approval["decision"] != "APPROVED_WITH_RULES":
+        raise HistoricalStatusAuthorityError("derived approval is not approved")
+    if manifest["approval_id"] != approval["approval_id"] or authority.authority_id not in manifest["fact_content_hashes"]:
+        raise HistoricalStatusAuthorityError("derived governance lineage mismatch")
+    if approval["rule_set"].get("parent_approval_id") != authority.parent_approval_id:
+        raise HistoricalStatusAuthorityError("parent approval lineage mismatch")
+    expected_composition = {
+        "parent_panel_id": authority.parent_panel_id,
+        "parent_manifest_id": authority.parent_manifest_id,
+        "parent_approval_id": authority.parent_approval_id,
+        "derived_authority_id": authority.authority_id,
+        "derived_manifest_id": expected_derived_manifest_id,
+        "derived_approval_id": expected_derived_approval_id,
+    }
+    if any(composition.get(name) != value for name, value in expected_composition.items()):
+        raise HistoricalStatusAuthorityError("composition lineage mismatch")
+    if replay.get("authority_id") != authority.authority_id or replay.get("replay_status") != "PASS":
+        raise HistoricalStatusAuthorityError("replay lineage mismatch")
+
+    expected_storage = {item.storage_hash for item in authority.shard_descriptors}
+    actual_paths = tuple(sorted((authority_root / "shards").rglob("*.json.gz")))
+    actual_storage = {path.stem.split(".")[0] for path in actual_paths}
+    if actual_storage != expected_storage or len(actual_paths) != len(expected_storage):
+        raise HistoricalStatusAuthorityError("portable shard inventory mismatch")
+    stores = HistoricalStatusShardStore(authority_root / "shards")
+    components = []
+    by_storage = {path.stem.split(".")[0]: path for path in actual_paths}
+    for descriptor in authority.shard_descriptors:
+        components.extend(stores.read(by_storage[descriptor.storage_hash], expected=descriptor))
+    return HistoricalStatusResolverV1(
+        authority=authority,
+        components=tuple(components),
+        approved_sessions=approved_sessions,
+        availability_policy_id=authority.pit_evidence_id,
+        derived_approval_id=expected_derived_approval_id,
+        derived_manifest_id=expected_derived_manifest_id,
+    )
 
 
 @dataclass(frozen=True, slots=True)

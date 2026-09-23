@@ -161,6 +161,7 @@ def _resolver(tmp_path):
         lifecycle_rows=({"ts_code": "000001.SZ", "list_date": "20100104", "delist_date": "20100108"},),
         namechange_rows=({"ts_code": "000001.SZ", "name": "ST测试", "start_date": "20100105", "end_date": "20100106", "ann_date": "20100104"},),
         suspension_rows=(
+            {"ts_code": "000001.SZ", "trade_date": "20100105", "suspend_type": "S", "suspend_timing": "09:30-10:00"},
             {"ts_code": "000001.SZ", "trade_date": "20100106", "suspend_type": "S", "suspend_timing": ""},
             {"ts_code": "000001.SZ", "trade_date": "20100107", "suspend_type": "R", "suspend_timing": ""},
         ),
@@ -170,6 +171,7 @@ def _resolver(tmp_path):
         ("LIFECYCLE", lifecycle),
         ("RISK_WARNING", risk),
         ("FULL_DAY_SUSPENSION", tuple(x for x in suspension if x.component_kind == "FULL_DAY_SUSPENSION")),
+        ("PARTIAL_SUSPENSION", tuple(x for x in suspension if x.component_kind == "PARTIAL_SUSPENSION")),
         ("RESUMPTION", tuple(x for x in suspension if x.component_kind == "RESUMPTION")),
     ))
     authority = HistoricalStatusAuthorityV1.create(
@@ -198,7 +200,7 @@ def test_resolver_derives_ordinary_with_closed_world_lineage(tmp_path):
         True, False, False, False
     )
     assert result.lifecycle_component_id
-    assert len(result.closed_world_shard_ids) == 3
+    assert len(result.closed_world_shard_ids) == 4
     assert result.available_at == datetime(2010, 1, 4, 16, 30, tzinfo=ZONE)
     assert result.verify()
 
@@ -219,8 +221,12 @@ def test_resolver_applies_next_session_st_and_same_close_suspension(tmp_path):
     )
     assert not before.risk_warning
     assert st.risk_warning
+    assert not st.full_day_suspended
+    assert len(st.applicable_suspension_component_ids) == 1
     assert suspended.full_day_suspended
+    assert len(suspended.applicable_suspension_component_ids) == 1
     assert not resumed.full_day_suspended
+    assert len(resumed.applicable_suspension_component_ids) == 1
 
 
 def test_resolver_fails_closed_outside_coverage_unknown_or_naive(tmp_path):
