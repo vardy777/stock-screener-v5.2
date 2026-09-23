@@ -8,13 +8,247 @@ import io
 import json
 import os
 from pathlib import Path
+import re
 from typing import Any, Mapping
 
 from v5_2.data.identity import canonical_json, content_hash
+from v5_2.data.raw_artifacts import RawArtifactStore
 
 
 class HistoricalStatusAuthorityError(RuntimeError):
     """Portable historical status authority cannot be trusted."""
+
+
+def require_exact_hash_inventory(
+    *, name: str, actual: tuple[str, ...], expected: tuple[str, ...]
+) -> tuple[str, ...]:
+    if len(actual) != len(set(actual)):
+        raise HistoricalStatusAuthorityError(f"duplicate {name} identity")
+    actual_set, expected_set = set(actual), set(expected)
+    missing = expected_set - actual_set
+    extra = actual_set - expected_set
+    if missing:
+        raise HistoricalStatusAuthorityError(f"missing {name} identity")
+    if extra:
+        raise HistoricalStatusAuthorityError(f"extra {name} identity")
+    return tuple(sorted(actual_set))
+
+
+def ensure_repository_local_staging(repository_root: Path, staging_root: Path) -> Path:
+    repository = repository_root.resolve(strict=True)
+    staging = staging_root.resolve(strict=False)
+    if staging == repository or repository not in staging.parents:
+        raise HistoricalStatusAuthorityError("staging must be repository-local")
+    if staging.exists() and staging.is_symlink():
+        raise HistoricalStatusAuthorityError("staging symlink is forbidden")
+    return staging
+
+
+def _provider_date(value: Any, *, nullable: bool = False) -> date | None:
+    if value in (None, "") and nullable:
+        return None
+    text = str(value)
+    try:
+        return date(int(text[:4]), int(text[4:6]), int(text[6:8]))
+    except (TypeError, ValueError) as error:
+        raise HistoricalStatusAuthorityError("provider date is invalid") from error
+
+
+def normalize_status_rows(*, lifecycle_rows, namechange_rows, suspension_rows):
+    lifecycle = []
+    for row in lifecycle_rows:
+        source_hash = content_hash(row)
+        start = _provider_date(row.get("list_date"))
+        end = _provider_date(row.get("delist_date"), nullable=True)
+        lifecycle.append(HistoricalStatusComponentV1.create(
+            component_kind="LIFECYCLE",
+            canonical_security_identity=str(row.get("ts_code", "")),
+            effective_from=start,
+            effective_to=end,
+            event_session=None,
+            source_row_hash=source_hash,
+            availability_basis="MARKET_OBSERVABLE_BY_CLOSE",
+            availability_input_date=start,
+            source_fields={"list_date": row.get("list_date"), "delist_date": row.get("delist_date")},
+        ))
+    risk = []
+    for row in namechange_rows:
+        if not re.match(r"^(?:S\*?ST|\*?ST)", str(row.get("name", "")), re.I):
+            continue
+        start = _provider_date(row.get("start_date"))
+        end = _provider_date(row.get("end_date"), nullable=True)
+        announcement = _provider_date(row.get("ann_date"))
+        risk.append(HistoricalStatusComponentV1.create(
+            component_kind="RISK_WARNING",
+            canonical_security_identity=str(row.get("ts_code", "")),
+            effective_from=start,
+            effective_to=end,
+            event_session=None,
+            source_row_hash=content_hash(row),
+            availability_basis="NEXT_SESSION_SAFE",
+            availability_input_date=announcement,
+            source_fields={key: row.get(key) for key in (
+                "name", "start_date", "end_date", "ann_date", "change_reason"
+            )},
+        ))
+    suspension = []
+    for row in suspension_rows:
+        event = _provider_date(row.get("trade_date"))
+        kind = str(row.get("suspend_type", "")).upper()
+        if kind == "S":
+            component_kind = "PARTIAL_SUSPENSION" if row.get("suspend_timing") else "FULL_DAY_SUSPENSION"
+        elif kind == "R":
+            component_kind = "RESUMPTION"
+        else:
+            raise HistoricalStatusAuthorityError("unknown suspension type")
+        suspension.append(HistoricalStatusComponentV1.create(
+            component_kind=component_kind,
+            canonical_security_identity=str(row.get("ts_code", "")),
+            effective_from=event,
+            effective_to=event,
+            event_session=event,
+            source_row_hash=content_hash(row),
+            availability_basis="MARKET_OBSERVABLE_BY_CLOSE",
+            availability_input_date=event,
+            source_fields={key: row.get(key) for key in (
+                "trade_date", "suspend_type", "suspend_timing"
+            )},
+        ))
+    key = lambda item: item.component_id
+    return tuple(sorted(lifecycle, key=key)), tuple(sorted(risk, key=key)), tuple(sorted(suspension, key=key))
+
+
+@dataclass(frozen=True, slots=True)
+class FrozenStatusInputReconstructionV1:
+    raw_payload_hashes: tuple[str, ...]
+    receipt_hashes: tuple[str, ...]
+    lifecycle_rows: tuple[Mapping[str, Any], ...]
+    namechange_rows: tuple[Mapping[str, Any], ...]
+    suspension_rows: tuple[Mapping[str, Any], ...]
+    lifecycle_hash: str
+    risk_warning_hash: str
+    suspension_hash: str
+
+
+def _stored_identity(value: Mapping[str, Any], schema: str, identities: tuple[str, ...]) -> bool:
+    body = {key: item for key, item in value.items() if key not in identities}
+    digest = _identity(schema, body)
+    return all(value.get(key) == digest for key in identities)
+
+
+def _canonical_provider_rows(rows) -> tuple[Mapping[str, Any], ...]:
+    unique = {content_hash(row): json.loads(canonical_json(row)) for row in rows}
+    return tuple(unique[key] for key in sorted(unique))
+
+
+def _artifact_paths(root: Path, dataset_kind: str) -> tuple[Path, ...]:
+    return tuple(sorted(
+        path for path in root.rglob("*.json")
+        if dataset_kind in path.parts and "receipts" not in path.parts
+    ))
+
+
+def reconstruct_frozen_status_inputs(
+    *, repository_root: Path, staging_root: Path, manifest_path: Path,
+    panel_path: Path, approval_path: Path, revoked_approval_ids: tuple[str, ...] = (),
+) -> FrozenStatusInputReconstructionV1:
+    repository = repository_root.resolve(strict=True)
+    staging = ensure_repository_local_staging(repository, staging_root)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    panel = json.loads(panel_path.read_text(encoding="utf-8"))
+    approval = json.loads(approval_path.read_text(encoding="utf-8"))
+    if not _stored_identity(panel, "ResearchWideHistoricalSecurityStatusPanelV1", ("panel_id", "content_hash")):
+        raise HistoricalStatusAuthorityError("parent panel identity mismatch")
+    if not _stored_identity(manifest, "DatasetManifestV1", ("dataset_id", "manifest_hash")):
+        raise HistoricalStatusAuthorityError("parent manifest identity mismatch")
+    if not _stored_identity(approval, "SourceApprovalArtifactV1", ("approval_id", "content_hash")):
+        raise HistoricalStatusAuthorityError("parent approval identity mismatch")
+    if approval["approval_id"] in set(revoked_approval_ids):
+        raise HistoricalStatusAuthorityError("parent approval is revoked")
+    if manifest["approval_id"] != approval["approval_id"] or manifest["fact_content_hashes"] != [panel["panel_id"]]:
+        raise HistoricalStatusAuthorityError("parent governance pins mismatch")
+    if approval["rule_set"].get("panel_id") != panel["panel_id"]:
+        raise HistoricalStatusAuthorityError("approval panel pin mismatch")
+
+    payload_hashes: list[str] = []
+    by_kind: dict[str, list[Mapping[str, Any]]] = {
+        "risk_warning_history": [], "suspension_history": []
+    }
+    raw_store = RawArtifactStore(staging)
+    for kind in by_kind:
+        for path in _artifact_paths(staging, kind):
+            artifact = raw_store.read_payload(path)
+            if "datahubco_tushare_proxy" not in path.parts:
+                raise HistoricalStatusAuthorityError("wrong raw source")
+            payload_hashes.append(artifact.payload_hash)
+            rows = artifact.provider_payload.get("rows") if isinstance(artifact.provider_payload, Mapping) else None
+            if not isinstance(rows, list):
+                raise HistoricalStatusAuthorityError("provider rows are missing")
+            by_kind[kind].extend(rows)
+    exact_raw = require_exact_hash_inventory(
+        name="raw payload", actual=tuple(payload_hashes),
+        expected=tuple(manifest["raw_payload_hashes"]),
+    )
+
+    receipt_hashes = []
+    for path in sorted(path for path in staging.rglob("*.json") if "receipts" in path.parts):
+        receipt = raw_store.read_receipt(path)
+        receipt_hashes.append(receipt.receipt_hash)
+    exact_receipts = require_exact_hash_inventory(
+        name="receipt", actual=tuple(receipt_hashes), expected=tuple(manifest["receipt_hashes"])
+    )
+
+    lifecycle_by_identity: dict[str, Mapping[str, Any]] = {}
+    for root in (
+        repository / "data/phase_1b1/raw/datahubco_tushare_proxy/security_master",
+        repository / "data/phase_1b1_2026_extension/raw/datahubco_tushare_proxy/security_master",
+    ):
+        for path in sorted(root.rglob("*.json")):
+            artifact = RawArtifactStore(root).read_payload(path)
+            for row in artifact.provider_payload["rows"]:
+                identity = str(row.get("ts_code", ""))
+                if not identity.endswith((".SH", ".SZ")):
+                    continue
+                canonical = {
+                    "ts_code": identity,
+                    "list_date": row.get("list_date"),
+                    "delist_date": row.get("delist_date") or None,
+                }
+                previous = lifecycle_by_identity.get(identity)
+                if previous is not None and previous != canonical:
+                    raise HistoricalStatusAuthorityError("conflicting lifecycle identity")
+                lifecycle_by_identity[identity] = canonical
+    target_path = next((repository / "data/phase_1b_exit_remediation/governance").glob(
+        "complete-security-master-fact-bundle-*.json"
+    ))
+    target = json.loads(target_path.read_text(encoding="utf-8"))["ordered_security_identities"]
+    if set(target) - set(lifecycle_by_identity):
+        raise HistoricalStatusAuthorityError("missing lifecycle identity")
+    lifecycle_rows = tuple(lifecycle_by_identity[item] for item in target)
+    names = _canonical_provider_rows(by_kind["risk_warning_history"])
+    risk_rows = tuple(row for row in names if re.match(
+        r"^(?:S\*?ST|\*?ST)", str(row.get("name", "")), re.I
+    ))
+    suspensions = _canonical_provider_rows(
+        row for row in by_kind["suspension_history"]
+        if "20100104" <= str(row.get("trade_date", "")) <= "20260910"
+    )
+    hashes = {
+        "lifecycle_hash": content_hash(tuple(
+            (row["ts_code"], row.get("list_date"), row.get("delist_date") or None)
+            for row in lifecycle_rows
+        )),
+        "risk_warning_hash": content_hash(risk_rows),
+        "suspension_hash": content_hash(suspensions),
+    }
+    for name, digest in hashes.items():
+        if panel[name] != digest:
+            raise HistoricalStatusAuthorityError(f"{name} mismatch")
+    return FrozenStatusInputReconstructionV1(
+        raw_payload_hashes=exact_raw, receipt_hashes=exact_receipts,
+        lifecycle_rows=lifecycle_rows, namechange_rows=names,
+        suspension_rows=suspensions, **hashes,
+    )
 
 
 def _verify_hash(value: str, name: str) -> None:
@@ -332,4 +566,3 @@ class HistoricalStatusCompositionV1:
         return _verify_dataclass(
             self, "HistoricalStatusCompositionV1", ("composition_id", "content_hash")
         )
-

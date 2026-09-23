@@ -10,6 +10,9 @@ from v5_2.data.historical_status_authority import (
     HistoricalStatusAuthorityV1,
     HistoricalStatusComponentV1,
     HistoricalStatusShardStore,
+    ensure_repository_local_staging,
+    normalize_status_rows,
+    require_exact_hash_inventory,
 )
 
 
@@ -98,3 +101,48 @@ def test_authority_verification_pins_every_parent_inventory_and_shard(tmp_path):
 
     tampered = replace(authority, parent_panel_id="f" * 64)
     assert not tampered.verify()
+
+
+@pytest.mark.parametrize(
+    ("actual", "message"),
+    [
+        (("a" * 64,), "missing"),
+        (("a" * 64, "b" * 64, "c" * 64), "extra"),
+        (("a" * 64, "a" * 64, "b" * 64), "duplicate"),
+    ],
+)
+def test_exact_inventory_rejects_missing_extra_and_duplicate(actual, message):
+    with pytest.raises(HistoricalStatusAuthorityError, match=message):
+        require_exact_hash_inventory(
+            name="raw payload", actual=actual, expected=("a" * 64, "b" * 64)
+        )
+
+
+def test_staging_must_resolve_inside_repository(tmp_path):
+    repository = tmp_path / "repo"
+    repository.mkdir()
+    staging = repository / "data" / "stage"
+    staging.mkdir(parents=True)
+    assert ensure_repository_local_staging(repository, staging) == staging.resolve()
+    with pytest.raises(HistoricalStatusAuthorityError, match="repository-local"):
+        ensure_repository_local_staging(repository, tmp_path / "outside")
+
+
+def test_normalization_preserves_source_hash_and_status_semantics():
+    lifecycle, risk, suspension = normalize_status_rows(
+        lifecycle_rows=({"ts_code": "000001.SZ", "list_date": "20100104", "delist_date": None},),
+        namechange_rows=(
+            {"ts_code": "000001.SZ", "name": "ST测试", "start_date": "20110103", "end_date": "20110104", "ann_date": "20110103"},
+        ),
+        suspension_rows=(
+            {"ts_code": "000001.SZ", "trade_date": "20120104", "suspend_type": "S", "suspend_timing": ""},
+            {"ts_code": "000001.SZ", "trade_date": "20120105", "suspend_type": "S", "suspend_timing": "09:30-10:30"},
+            {"ts_code": "000001.SZ", "trade_date": "20120106", "suspend_type": "R", "suspend_timing": ""},
+        ),
+    )
+    assert [item.component_kind for item in lifecycle] == ["LIFECYCLE"]
+    assert [item.component_kind for item in risk] == ["RISK_WARNING"]
+    assert sorted(item.component_kind for item in suspension) == [
+        "FULL_DAY_SUSPENSION", "PARTIAL_SUSPENSION", "RESUMPTION"
+    ]
+    assert all(len(item.source_row_hash) == 64 for item in lifecycle + risk + suspension)
