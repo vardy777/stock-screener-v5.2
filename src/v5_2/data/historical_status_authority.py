@@ -509,9 +509,141 @@ class HistoricalStatusDerivationV1:
     source_version_identity: str
     content_hash: str
 
+    @classmethod
+    def create(cls, **values: Any) -> HistoricalStatusDerivationV1:
+        sources = (
+            tuple(values["applicable_risk_component_ids"])
+            + tuple(values["applicable_suspension_component_ids"])
+        )
+        if not values["lifecycle_component_id"] or not values["closed_world_shard_ids"]:
+            raise HistoricalStatusAuthorityError("derivation closed-world lineage is incomplete")
+        for value in (values["cutoff"], values["available_at"]):
+            if value.tzinfo is None or value.utcoffset() is None:
+                raise HistoricalStatusAuthorityError("derivation timezone is required")
+        if len(sources) != len(set(sources)):
+            raise HistoricalStatusAuthorityError("duplicate applicable status component")
+        body = {
+            **values,
+            "applicable_risk_component_ids": tuple(sorted(values["applicable_risk_component_ids"])),
+            "applicable_suspension_component_ids": tuple(sorted(values["applicable_suspension_component_ids"])),
+            "closed_world_shard_ids": tuple(sorted(values["closed_world_shard_ids"])),
+        }
+        digest = _identity("HistoricalStatusDerivationV1", body)
+        return cls(derivation_id=digest, content_hash=digest, **body)
+
     def verify(self) -> bool:
         return _verify_dataclass(
             self, "HistoricalStatusDerivationV1", ("derivation_id", "content_hash")
+        )
+
+
+class HistoricalStatusResolverV1:
+    def __init__(
+        self, *, authority: HistoricalStatusAuthorityV1,
+        components: tuple[HistoricalStatusComponentV1, ...],
+        approved_sessions: tuple[date, ...], availability_policy_id: str,
+    ) -> None:
+        if not authority.verify():
+            raise HistoricalStatusAuthorityError("authority identity mismatch")
+        if approved_sessions != tuple(sorted(set(approved_sessions))):
+            raise HistoricalStatusAuthorityError("approved sessions are not canonical")
+        _verify_hash(availability_policy_id, "availability policy")
+        if availability_policy_id != authority.pit_evidence_id:
+            raise HistoricalStatusAuthorityError("availability policy pin mismatch")
+        if any(not item.verify() for item in components):
+            raise HistoricalStatusAuthorityError("component identity mismatch")
+        source_rows = tuple(item.source_row_hash for item in components)
+        if len(source_rows) != len(set(source_rows)):
+            raise HistoricalStatusAuthorityError("duplicate source row identity")
+        self.authority = authority
+        self.components = components
+        self.approved_sessions = approved_sessions
+        self.availability_policy_id = availability_policy_id
+        self._lifecycles = {
+            item.canonical_security_identity: item
+            for item in components if item.component_kind == "LIFECYCLE"
+        }
+        if len(self._lifecycles) != sum(
+            item.component_kind == "LIFECYCLE" for item in components
+        ):
+            raise HistoricalStatusAuthorityError("conflicting lifecycle identity")
+        self._by_identity: dict[str, tuple[HistoricalStatusComponentV1, ...]] = {}
+        for identity in self._lifecycles:
+            self._by_identity[identity] = tuple(
+                item for item in components
+                if item.canonical_security_identity == identity
+                and item.component_kind != "LIFECYCLE"
+            )
+        self._closed_world = tuple(sorted(
+            descriptor.content_hash for descriptor in authority.shard_descriptors
+            if descriptor.component_kind != "LIFECYCLE"
+        ))
+
+    def _available_at(self, item: HistoricalStatusComponentV1) -> datetime:
+        from datetime import time, timedelta, timezone
+
+        zone = timezone(timedelta(hours=8), "Asia/Shanghai")
+        if item.availability_basis == "MARKET_OBSERVABLE_BY_CLOSE":
+            if item.availability_input_date not in self.approved_sessions:
+                raise HistoricalStatusAuthorityError("availability date is outside approved calendar")
+            day = item.availability_input_date
+        elif item.availability_basis == "NEXT_SESSION_SAFE":
+            later = tuple(day for day in self.approved_sessions if day > item.availability_input_date)
+            if not later:
+                raise HistoricalStatusAuthorityError("next approved session is unavailable")
+            day = later[0]
+        else:
+            raise HistoricalStatusAuthorityError("availability basis is unsupported")
+        return datetime.combine(day, time(16, 30), zone)
+
+    def resolve(self, identity: str, session: date, cutoff: datetime) -> HistoricalStatusDerivationV1:
+        from datetime import time, timedelta, timezone
+
+        if cutoff.tzinfo is None or cutoff.utcoffset() is None:
+            raise HistoricalStatusAuthorityError("cutoff timezone is required")
+        if not (self.authority.coverage_start <= session <= self.authority.coverage_end):
+            raise HistoricalStatusAuthorityError("session is outside authority coverage")
+        lifecycle = self._lifecycles.get(identity)
+        if lifecycle is None:
+            raise HistoricalStatusAuthorityError("canonical identity is unavailable")
+        zone = timezone(timedelta(hours=8), "Asia/Shanghai")
+        session_available = datetime.combine(session, time(16, 30), zone)
+        if cutoff < session_available:
+            raise HistoricalStatusAuthorityError("session status is unavailable at cutoff")
+        listed = lifecycle.effective_from <= session and (
+            lifecycle.effective_to is None or session <= lifecycle.effective_to
+        )
+        delisted = lifecycle.effective_to is not None and session > lifecycle.effective_to
+        risks, suspensions = [], []
+        for item in self._by_identity[identity]:
+            available_at = self._available_at(item)
+            if available_at > cutoff:
+                continue
+            if item.component_kind == "RISK_WARNING" and (
+                item.effective_from <= session
+                and (item.effective_to is None or session <= item.effective_to)
+            ):
+                risks.append(item.component_id)
+            if item.component_kind == "FULL_DAY_SUSPENSION" and item.event_session == session:
+                suspensions.append(item.component_id)
+        return HistoricalStatusDerivationV1.create(
+            authority_id=self.authority.authority_id,
+            canonical_security_identity=identity,
+            session=session,
+            cutoff=cutoff,
+            listed=listed,
+            delisted=delisted,
+            risk_warning=listed and bool(risks),
+            full_day_suspended=listed and bool(suspensions),
+            lifecycle_component_id=lifecycle.component_id,
+            applicable_risk_component_ids=tuple(risks),
+            applicable_suspension_component_ids=tuple(suspensions),
+            closed_world_shard_ids=self._closed_world,
+            available_at=session_available,
+            availability_policy_id=self.availability_policy_id,
+            parent_approval_id=self.authority.parent_approval_id,
+            parent_manifest_id=self.authority.parent_manifest_id,
+            source_version_identity=self.authority.source_version_identity,
         )
 
 

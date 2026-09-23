@@ -1,5 +1,5 @@
 from dataclasses import replace
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 import gzip
 import hashlib
 
@@ -10,10 +10,13 @@ from v5_2.data.historical_status_authority import (
     HistoricalStatusAuthorityV1,
     HistoricalStatusComponentV1,
     HistoricalStatusShardStore,
+    HistoricalStatusResolverV1,
     ensure_repository_local_staging,
     normalize_status_rows,
     require_exact_hash_inventory,
 )
+
+ZONE = timezone(timedelta(hours=8))
 
 
 PANEL = "a" * 64
@@ -146,3 +149,80 @@ def test_normalization_preserves_source_hash_and_status_semantics():
         "FULL_DAY_SUSPENSION", "PARTIAL_SUSPENSION", "RESUMPTION"
     ]
     assert all(len(item.source_row_hash) == 64 for item in lifecycle + risk + suspension)
+
+
+def _resolver(tmp_path):
+    lifecycle, risk, suspension = normalize_status_rows(
+        lifecycle_rows=({"ts_code": "000001.SZ", "list_date": "20100104", "delist_date": "20100108"},),
+        namechange_rows=({"ts_code": "000001.SZ", "name": "ST测试", "start_date": "20100105", "end_date": "20100106", "ann_date": "20100104"},),
+        suspension_rows=(
+            {"ts_code": "000001.SZ", "trade_date": "20100106", "suspend_type": "S", "suspend_timing": ""},
+            {"ts_code": "000001.SZ", "trade_date": "20100107", "suspend_type": "R", "suspend_timing": ""},
+        ),
+    )
+    store = HistoricalStatusShardStore(tmp_path)
+    encoded = tuple(store.encode(kind, values) for kind, values in (
+        ("LIFECYCLE", lifecycle),
+        ("RISK_WARNING", risk),
+        ("FULL_DAY_SUSPENSION", tuple(x for x in suspension if x.component_kind == "FULL_DAY_SUSPENSION")),
+        ("RESUMPTION", tuple(x for x in suspension if x.component_kind == "RESUMPTION")),
+    ))
+    authority = HistoricalStatusAuthorityV1.create(
+        coverage_start=date(2010, 1, 4), coverage_end=date(2010, 1, 8),
+        parent_panel_id=PANEL, parent_manifest_id=MANIFEST,
+        parent_approval_id=APPROVAL, pit_evidence_id=PIT,
+        source_version_identity=SOURCE_VERSION,
+        raw_payload_hashes=("2" * 64,), receipt_hashes=("3" * 64,),
+        request_inventory_id="4" * 64,
+        shard_descriptors=tuple(item.descriptor for item in encoded),
+        authority_policy_version="historical-status-authority-v1",
+    )
+    return HistoricalStatusResolverV1(
+        authority=authority,
+        components=lifecycle + risk + suspension,
+        approved_sessions=tuple(date(2010, 1, day) for day in range(4, 9)),
+        availability_policy_id=PIT,
+    )
+
+
+def test_resolver_derives_ordinary_with_closed_world_lineage(tmp_path):
+    result = _resolver(tmp_path).resolve(
+        "000001.SZ", date(2010, 1, 4), datetime(2010, 1, 4, 16, 30, tzinfo=ZONE)
+    )
+    assert (result.listed, result.delisted, result.risk_warning, result.full_day_suspended) == (
+        True, False, False, False
+    )
+    assert result.lifecycle_component_id
+    assert len(result.closed_world_shard_ids) == 3
+    assert result.available_at == datetime(2010, 1, 4, 16, 30, tzinfo=ZONE)
+    assert result.verify()
+
+
+def test_resolver_applies_next_session_st_and_same_close_suspension(tmp_path):
+    resolver = _resolver(tmp_path)
+    before = resolver.resolve(
+        "000001.SZ", date(2010, 1, 4), datetime(2010, 1, 4, 16, 30, tzinfo=ZONE)
+    )
+    st = resolver.resolve(
+        "000001.SZ", date(2010, 1, 5), datetime(2010, 1, 5, 16, 30, tzinfo=ZONE)
+    )
+    suspended = resolver.resolve(
+        "000001.SZ", date(2010, 1, 6), datetime(2010, 1, 6, 16, 30, tzinfo=ZONE)
+    )
+    resumed = resolver.resolve(
+        "000001.SZ", date(2010, 1, 7), datetime(2010, 1, 7, 16, 30, tzinfo=ZONE)
+    )
+    assert not before.risk_warning
+    assert st.risk_warning
+    assert suspended.full_day_suspended
+    assert not resumed.full_day_suspended
+
+
+def test_resolver_fails_closed_outside_coverage_unknown_or_naive(tmp_path):
+    resolver = _resolver(tmp_path)
+    with pytest.raises(HistoricalStatusAuthorityError, match="coverage"):
+        resolver.resolve("000001.SZ", date(2010, 1, 9), datetime(2010, 1, 9, 16, 30, tzinfo=ZONE))
+    with pytest.raises(HistoricalStatusAuthorityError, match="identity"):
+        resolver.resolve("UNKNOWN.SZ", date(2010, 1, 5), datetime(2010, 1, 5, 16, 30, tzinfo=ZONE))
+    with pytest.raises(HistoricalStatusAuthorityError, match="timezone"):
+        resolver.resolve("000001.SZ", date(2010, 1, 5), datetime(2010, 1, 5, 16, 30))
