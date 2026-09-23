@@ -196,4 +196,3 @@ artifacts. No wall-clock value enters an artifact identity.
 - Compressed artifact bytes and all IDs are deterministic across isolated runs.
 - Coverage and counts reconcile without unexplained remainder.
 - No Phase 2B Task 5 code, pilot or final acceptance runs.
-
