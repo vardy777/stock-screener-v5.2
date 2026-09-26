@@ -58,6 +58,12 @@ authorized for redistribution to the public repository.
   LabelValue, LabelResult, LabelRow, Partition and metadata identities.
   Source-pinned independent comparison still reported a mismatch.
 - A rehashed barrier outcome mutation was independently rejected.
+- Additional rehashed `return_3d`, `return_5d`, favorable/adverse excursion,
+  state/reason, and domain-lineage mutations were independently rejected.
+  Focused comparison regression: `11 passed in 106.09s`. An initial test
+  attempt failed because the test named nonexistent `mfe_5d`/`mae_5d`
+  aliases; it was corrected to the frozen canonical field names without
+  changing production semantics.
 - Exact comparison-ledger read rejects tampering; create-or-identical rejects
   a collision. No caller `expected_hash == observed_hash` can make a gate PASS.
 - `scripts/verify_standalone.py`: five checks PASS, zero violations.
@@ -96,3 +102,19 @@ It is not yet a published research manifest or final gate PASS. The real
 census command exited 0; combined focused regression was `11 passed,
 1 skipped in 107.56s`, where the skip is the separately gated real-month
 pytest entrypoint. The real-month census itself was run explicitly and passed.
+
+## Full-suite isolation regression and scoped correction
+
+The first post-change full pytest run returned `974 passed, 2 skipped,
+1 failed in 1164.52s`. The sole failure was the older
+`test_label_engine_has_no_filesystem_network_environment_or_pointer_access`:
+it scanned every file under `src/v5_2/labels`, including Phase 2B offline
+artifact readers whose purpose is exact physical file access. Investigation
+showed no `Path` or file I/O in the `ReferenceLabelEngine` import closure.
+The test now derives that closure from AST imports and scans its three pure
+modules (`engine`, `calculation`, `contracts`), with a sentinel proving it
+still detects a forbidden `Path` call. Focused isolation rerun: `6 passed`.
+This changes the test's scope, not frozen Label Engine semantics. The full
+suite rerun after correction returned `976 passed, 2 skipped in 624.17s`.
+The two skips are explicit local-data entrypoints; neither is counted as
+clean-room or formal Gate V2 acceptance.
