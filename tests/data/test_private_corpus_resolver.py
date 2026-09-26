@@ -12,7 +12,8 @@ from v5_2.data.private_corpus_manifest import (
     Phase2BPrivateCorpusManifestV1, PrivateCorpusEntryV1, read_manifest_exact,
 )
 from v5_2.data.private_corpus_resolver import (
-    assert_private_objects_untracked, populate_private_cas,
+    assert_private_objects_unreachable_from_refs, assert_private_objects_untracked,
+    populate_private_cas,
     stage_verified_private_corpus,
 )
 
@@ -109,7 +110,42 @@ def test_staged_private_bytes_rejected_even_if_worktree_changed(tmp_path):
 
 def test_real_private_corpus_is_absent_from_git_index():
     root = Path(__file__).resolve().parents[2]
+    if not (root / ".git").exists():
+        pytest.skip("Git ref hygiene requires an actual checkout")
     manifest_id = "0489978b34834817ee0e33dbd46d4e90b86a14e9827f89ba5b93433797c2ddd6"
     path = root / "governance" / "phase2b" / f"private-corpus-manifest-{manifest_id}.json"
     manifest = read_manifest_exact(path, manifest_id)
     assert_private_objects_untracked(manifest, root)
+    assert_private_objects_unreachable_from_refs(manifest, root)
+
+
+def test_other_ref_reaching_private_blob_is_rejected(tmp_path):
+    repository = tmp_path / "repo"
+    repository.mkdir()
+    subprocess.run(("git", "init", str(repository)), check=True, capture_output=True)
+    subprocess.run(("git", "-C", str(repository), "config", "user.name", "Test"),
+                   check=True, capture_output=True)
+    subprocess.run(("git", "-C", str(repository), "config", "user.email", "test@local"),
+                   check=True, capture_output=True)
+    target = repository / "hidden.bin"
+    target.write_bytes(PAYLOAD)
+    subprocess.run(("git", "-C", str(repository), "add", "hidden.bin"),
+                   check=True, capture_output=True)
+    subprocess.run(("git", "-C", str(repository), "commit", "-m", "tainted"),
+                   check=True, capture_output=True)
+    subprocess.run(("git", "-C", str(repository), "branch", "tainted"),
+                   check=True, capture_output=True)
+    subprocess.run(("git", "-C", str(repository), "switch", "--orphan", "clean"),
+                   check=True, capture_output=True)
+    (repository / "clean.txt").write_bytes(b"safe")
+    subprocess.run(("git", "-C", str(repository), "add", "clean.txt"),
+                   check=True, capture_output=True)
+    subprocess.run(("git", "-C", str(repository), "commit", "-m", "clean tree"),
+                   check=True, capture_output=True)
+    clean_objects = subprocess.run(("git", "-C", str(repository), "rev-list",
+                                    "--objects", "clean"), capture_output=True,
+                                   check=True).stdout
+    assert b"hidden.bin" not in clean_objects
+    assert_private_objects_untracked(fixture_manifest(), repository)
+    with pytest.raises(ValueError, match="reachable"):
+        assert_private_objects_unreachable_from_refs(fixture_manifest(), repository)

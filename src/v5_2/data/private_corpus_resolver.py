@@ -120,3 +120,39 @@ def assert_private_objects_untracked(manifest: Phase2BPrivateCorpusManifestV1,
         if path.is_file() and path.stat().st_size in hashes_by_size:
             if sha256(path.read_bytes()).hexdigest() in hashes_by_size[path.stat().st_size]:
                 raise ValueError("private corpus bytes are Git-tracked")
+
+
+def assert_private_objects_unreachable_from_refs(
+        manifest: Phase2BPrivateCorpusManifestV1, repository_root: Path) -> None:
+    """Reject exact private bytes reachable from any current local Git ref."""
+    if not manifest.verify():
+        raise ValueError("private corpus manifest is invalid")
+    git = ("git", "-C", str(repository_root))
+    listed = subprocess.run((*git, "rev-list", "--objects", "--all"),
+                            capture_output=True, check=False)
+    if listed.returncode:
+        raise ValueError("Git ref-object audit unavailable")
+    oids = tuple(dict.fromkeys(line.split(b" ", 1)[0]
+                                for line in listed.stdout.splitlines()))
+    checked = subprocess.run((*git, "cat-file", "--batch-check"),
+                             input=b"".join(oid + b"\n" for oid in oids),
+                             capture_output=True, check=False)
+    details = checked.stdout.splitlines()
+    if checked.returncode or len(details) != len(oids):
+        raise ValueError("Git ref-object audit unavailable")
+    hashes_by_size: dict[int, set[str]] = {}
+    for item in manifest.entries:
+        hashes_by_size.setdefault(item.byte_size, set()).add(item.sha256)
+    for oid, detail in zip(oids, details):
+        parts = detail.split()
+        if len(parts) != 3 or parts[0] != oid:
+            raise ValueError("Git ref-object audit unavailable")
+        if parts[1] != b"blob" or int(parts[2]) not in hashes_by_size:
+            continue
+        size = int(parts[2])
+        blob = subprocess.run((*git, "cat-file", "blob", oid.decode("ascii")),
+                              capture_output=True, check=False)
+        if blob.returncode or len(blob.stdout) != size:
+            raise ValueError("Git ref-object audit unavailable")
+        if sha256(blob.stdout).hexdigest() in hashes_by_size[size]:
+            raise ValueError("private corpus bytes are reachable from Git refs")
