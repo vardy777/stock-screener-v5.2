@@ -47,7 +47,7 @@
 
 - [ ] Write tests for canonical ordering, duplicate roles, traversal/absolute paths, tampering, missing source, and exact approved file inventory.
 - [ ] Run focused tests; verify RED.
-- [ ] Implement from approved authority pins only; exclude tracked and unrelated local files.
+- [ ] Implement from approved authority pins only; exclude tracked and unrelated local files, including the obsolete ignored Master inventory.
 - [ ] Run focused tests; verify GREEN; generate and commit only metadata.
 
 ### Task 3: Private population, resolver, and Git hygiene

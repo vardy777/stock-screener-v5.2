@@ -14,8 +14,10 @@ historical cutoff.
 The public repository contains code, already tracked approved artifacts, and
 one `Phase2BPrivateCorpusManifestV1` of metadata. Only exact, currently
 required and Git-untracked source files enter the private CAS: the frozen
-Status authority/governance/shards, four approved CA files, two Calendar
-extension/approval files, and the Master source-corpus inventory. Stale or
+Status authority/governance/shards, four approved CA files, and two Calendar
+extension/approval files. The current exact Master source-corpus inventory
+`a534f396...` is already tracked; the ignored `ab963f9f...` predecessor is
+not current authority and must not enter this CAS. Stale or
 unrelated files in the same local directories do not enter the inventory.
 The inventory builder first loads all five existing approved authorities and
 then enumerates the files from their exact pins; it may not discover a
