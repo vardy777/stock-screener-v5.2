@@ -18,7 +18,10 @@ blobs first entered that feature history in `da0113fee4a6ddb707e54d1e38aa260573f
 An exact private incident ledger outside this repository records each SHA-256,
 byte size, path, introducing commit, and all feature commits containing the
 object. A verified private Git bundle preserves the pre-remediation local
-work and incident evidence.
+work and incident evidence. The private taint-inventory file SHA-256 is
+`0f0fc67f0346fc5a70911d7056a203fc3b96a102ae2f10355a924653c01439fc`;
+the private incident-record file SHA-256 is
+`c7a694bd7bb743bc953f20f8a0b4b6bb3e8b8e96df3e78f38be86de72477da32`.
 
 ## Containment and rewrite
 
@@ -74,6 +77,18 @@ Partition ID: `3c194baf309486c16dd8f7f9e1916f4a1a4af49c9b108bcc06ce693eee615ba9`
 Coverage hash: `b6108848b3cd469f37f1baaa43e4c3b5aa5f253663d47ac9e32e9fc8022b7e3c`.
 Scoped ledger ID: `a1092d6465b32c7141a9befb290938adecca2f08b8fb646389becf941f9c656e`.
 Integration ID: `df54c5a80093115d469ec0257127ecd59c304f7c6d440ad2dc8bd4b85d641f67`.
+The explicit, committed private-CAS clean-room test repeated the full
+calculation against the same remote feature content in `599.97s` and passed
+all four counts and all four pinned IDs (`1 passed`). No source was read from
+the original checkout at runtime.
+An independent source-pinned Master/Calendar census in the same fresh checkout
+recomputed the 34,271 candidate anchors and their 26,899 / 6,950 / 422
+dispositions; evidence ID
+`834534a947d79b10a16404ae35430aafb63b36e0ac467d46b97a57117959ef75`
+matched the prior immutable result.
+The source-pinned independent calculator reread the physical partition and
+recomputed all 26,899 rows: mismatches `0`, comparison ledger ID
+`c3b16aa0f7618e702e5bcab8b977b1919a75f72c5d65795576a1eeb74dd0bca8`.
 
 The repository's ordinary `clean_room_acceptance.py` returned `782 passed,
 218 skipped`; build, wheel install/smoke, archive scan, and zero-project-
@@ -82,11 +97,27 @@ a Git-ref hygiene test ran inside a wheel-only directory without `.git`.
 The test now skips only in non-Git installations; the actual checkout ref
 audit remains mandatory and was run separately.
 
+The first source-installed full suite after the history rewrite returned
+`993 passed, 4 skipped, 1 failed, 2 errors in 985.51s`. The three non-passes
+shared one cause: two real-audit tests still loaded the now-incomplete old
+Git-tracked Status portable directory. They were retargeted to the exact
+private-CAS `data/replay_status_authority` role, with a file-level availability
+check; no production semantics changed. The 8 retained governance files under
+the two roots were byte-identical. Focused regression after correction:
+`3 passed, 1 skipped in 90.46s`, where the skip requires an explicit offline
+status staging root. Final `python -m pytest -q` rerun returned
+`996 passed, 4 skipped in 628.54s`. The four skips were explicit local-data
+entrypoints: private-corpus manifest, real-month integration, private-CAS
+clean-room, and offline Status staging. The gated private-CAS clean-room was
+run separately and passed; its generic skip is not counted as that result.
+
 ## Residual risk and next gate
 
 A private, hash-only GitHub Support request draft identifies the old affected
 range and all 38 paths/object identities. It has **not been submitted**.
-GitHub cache, dangling-object, or external-clone erasure is not claimed.
+The old `cecba5018582ee4daaf403244324c3f29b70ee67` commit remained
+readable through GitHub's commit API after the ref rewrite. GitHub cache,
+dangling-object, or external-clone erasure is not claimed.
 Historical public exposure remains `YES / REMEDIATED_FROM_ACTIVE_REFS`.
 
 `CHECKPOINT 18 = FAIL / OPEN` pending final Gate V2 predicates, mutation

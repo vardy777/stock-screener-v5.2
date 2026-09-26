@@ -23,7 +23,7 @@ from v5_2.labels.materializer import (
 
 
 ROOT = Path(__file__).resolve().parents[2]
-PORTABLE = ROOT / "data/phase_1_status_lineage_remediation_v1"
+PORTABLE = ROOT / "data/replay_status_authority"
 AUTHORITY = "d6f7f5517428891db66da60565baaea5828d7adcaf29c820d5fa746ddf29e59b"
 LEDGER = "b214cc728c867c7b5bdbef5e6b37cea25afa67650522d5aee800cd95f56237cb"
 APPROVAL = "9353de33e62405830a7dbef13e53836a969fb569f9e7d5370a67d5df9078fa95"
@@ -33,7 +33,8 @@ REPLAY = "235f86dd7269768382c67620cd723d27347c7f99e386488efc9b93665a517baf"
 
 
 pytestmark = pytest.mark.skipif(
-    not PORTABLE.is_dir() or not (ROOT / "data/phase_2a/governance").is_dir(),
+    not (PORTABLE / "authority" / f"historical-status-authority-{AUTHORITY}.json").is_file()
+    or not (ROOT / "data/phase_2a/governance").is_dir(),
     reason="repository-local immutable acceptance evidence is excluded from clean room",
 )
 

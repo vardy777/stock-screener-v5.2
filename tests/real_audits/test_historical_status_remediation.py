@@ -15,7 +15,7 @@ from v5_2.data.historical_status_authority import (
 ROOT = Path(__file__).resolve().parents[2]
 GOVERNANCE = ROOT / "data/phase_1b_exit_remediation/governance"
 STAGING = os.environ.get("V5_2_STATUS_STAGING_ROOT")
-PORTABLE = ROOT / "data/phase_1_status_lineage_remediation_v1"
+PORTABLE = ROOT / "data/replay_status_authority"
 DERIVED_APPROVAL = "9353de33e62405830a7dbef13e53836a969fb569f9e7d5370a67d5df9078fa95"
 DERIVED_MANIFEST = "0c86954cffaae2ca09ff1efcd4b32d990a9cf3d2b82d520a64172a1875d457a8"
 AUTHORITY = "d6f7f5517428891db66da60565baaea5828d7adcaf29c820d5fa746ddf29e59b"
@@ -66,7 +66,8 @@ def test_retained_status_inputs_exactly_reconstruct_frozen_authority():
     assert reconstructed.suspension_hash == "87e2a971a17660a632d058f95135ebb6d984d40534a956e052df17a19076c38d"
 
 
-@pytest.mark.skipif(not PORTABLE.exists(), reason="repository-local portable authority is unavailable")
+@pytest.mark.skipif(not (PORTABLE / "authority" / f"historical-status-authority-{AUTHORITY}.json").is_file(),
+                    reason="exact private-CAS status authority is unavailable")
 def test_portable_authority_resolves_arbitrary_exact_lineage(portable_resolver):
     ordinary = portable_resolver.resolve(
         "000001.SZ", date(2010, 1, 4), datetime(2010, 1, 4, 16, 30, tzinfo=ZONE)
@@ -87,7 +88,8 @@ def test_portable_authority_resolves_arbitrary_exact_lineage(portable_resolver):
         assert result.verify()
 
 
-@pytest.mark.skipif(not PORTABLE.exists(), reason="repository-local portable authority is unavailable")
+@pytest.mark.skipif(not (PORTABLE / "authority" / f"historical-status-authority-{AUTHORITY}.json").is_file(),
+                    reason="exact private-CAS status authority is unavailable")
 def test_portable_loader_rejects_revoked_parent_and_post_coverage(portable_resolver):
     with pytest.raises(HistoricalStatusAuthorityError, match="revoked"):
         load_portable_status_resolver(
