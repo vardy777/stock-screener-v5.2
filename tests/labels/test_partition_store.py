@@ -6,6 +6,7 @@ from v5_2.labels.partition_store import (
     ImmutableArtifactCollision,
     read_manifest_exact,
     read_partition_exact,
+    read_partition_rows_exact,
     write_manifest,
     write_partition,
 )
@@ -42,6 +43,17 @@ def test_partition_read_requires_exact_id_and_never_repairs_order(tmp_path):
     path = write_partition(tmp_path, partition, rows)
     with pytest.raises(ValueError, match="expected partition"):
         read_partition_exact(path, "f" * 64)
+
+
+def test_partition_rows_read_exactly_and_reject_count_preserving_value_tamper(tmp_path):
+    partition, rows = partition_and_rows()
+    path = write_partition(tmp_path, partition, rows)
+    assert read_partition_rows_exact(path, partition.partition_id) == rows
+    raw = path.read_bytes()
+    path.write_bytes(raw.replace(b'"value":"0.01000000"',
+                                 b'"value":"0.02000000"', 1))
+    with pytest.raises(ValueError):
+        read_partition_rows_exact(path, partition.partition_id)
 
 
 def test_manifest_write_is_exact_immutable_and_tamper_fails_closed(tmp_path):

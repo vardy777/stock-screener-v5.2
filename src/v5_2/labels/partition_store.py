@@ -8,6 +8,10 @@ import json
 from pathlib import Path
 from typing import Iterable
 
+from v5_2.labels.calculation import BarrierAmbiguityEvidenceV1, BarrierCalculationV1
+from v5_2.labels.contracts import (
+    BarrierOutcomeV1, LabelReasonCode, LabelState, LabelValueV1, ProvenancePath,
+)
 from v5_2.labels.dataset_contracts import LabelDatasetManifestV1, LabelPartitionV1, LabelRowV1
 
 
@@ -75,6 +79,75 @@ def read_partition_exact(path: Path, expected_id: str) -> LabelPartitionV1:
     if partition.partition_id != expected_id or not partition.verify():
         raise ValueError("canonical partition metadata invalid")
     return partition
+
+
+def _row_from_dict(values: dict) -> LabelRowV1:
+    parsed_values = []
+    for item in values["values"]:
+        value = item["value"]
+        if value is not None and not isinstance(value, bool):
+            value = Decimal(value)
+        parsed_values.append(LabelValueV1(
+            label_name=item["label_name"], state=LabelState(item["state"]),
+            value=value, reason_code=(None if item["reason_code"] is None
+                                     else LabelReasonCode(item["reason_code"])),
+            horizon_end_session=(None if item["horizon_end_session"] is None
+                                 else date.fromisoformat(item["horizon_end_session"])),
+            observed_at=(None if item["observed_at"] is None
+                         else datetime.fromisoformat(item["observed_at"])),
+            input_fact_ids=tuple(item["input_fact_ids"]),
+            contract_version=item["contract_version"], content_hash=item["content_hash"],
+        ))
+    barriers = []
+    for item in values["barrier_evidence"]:
+        decisive = (None if item["first_decisive_session"] is None
+                    else date.fromisoformat(item["first_decisive_session"]))
+        if "ambiguous_session" in item:
+            barriers.append(BarrierAmbiguityEvidenceV1(
+                None, decisive, None, date.fromisoformat(item["ambiguous_session"])))
+        else:
+            barriers.append(BarrierCalculationV1(
+                BarrierOutcomeV1(item["outcome"]), decisive, item["boolean_value"]))
+    return LabelRowV1(
+        canonical_security_identity=values["canonical_security_identity"],
+        anchor_session=date.fromisoformat(values["anchor_session"]),
+        label_contract_version=values["label_contract_version"],
+        materialization_version=values["materialization_version"],
+        provenance_path=ProvenancePath(values["provenance_path"]),
+        anchor_boundary_hash=values["anchor_boundary_hash"],
+        anchor_reference_price_hash=values["anchor_reference_price_hash"],
+        input_bundle_hash=values["input_bundle_hash"],
+        calculation_result_hash=values["calculation_result_hash"],
+        domain_lineage_hashes=tuple(values["domain_lineage_hashes"]),
+        anchor_snapshot_id=values["anchor_snapshot_id"],
+        outcome_snapshot_id=values["outcome_snapshot_id"],
+        values=tuple(parsed_values), barrier_evidence=tuple(barriers),
+        row_id=values["row_id"],
+    )
+
+
+def read_partition_rows_exact(path: Path, expected_id: str) -> tuple[LabelRowV1, ...]:
+    """Read physically verified rows; never infer membership from a filename."""
+    partition = read_partition_exact(path, expected_id)
+    rows = []
+    try:
+        with path.open("rb") as source:
+            for line in source:
+                if not line.endswith(b"\n"):
+                    raise ValueError("partition row is not newline terminated")
+                row = _row_from_dict(json.loads(line))
+                if not row.verify():
+                    raise ValueError("partition row identity mismatch")
+                rows.append(row)
+    except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError) as error:
+        raise ValueError("exact partition rows unavailable or invalid") from error
+    result = tuple(rows)
+    if (tuple(row.row_id for row in result) != partition.row_ids
+            or tuple((row.anchor_session, row.canonical_security_identity) for row in result)
+               != tuple(sorted((row.anchor_session, row.canonical_security_identity)
+                               for row in result))):
+        raise ValueError("partition row membership or order mismatch")
+    return result
 
 
 def write_manifest(root: Path, manifest: LabelDatasetManifestV1) -> Path:
