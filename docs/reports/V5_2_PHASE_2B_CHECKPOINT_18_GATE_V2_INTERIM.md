@@ -65,6 +65,34 @@ authorized for redistribution to the public repository.
 - Provider requests: **0**.
 
 The formal 18-gate evaluator, remaining semantic mutation classes, exact
-candidate census, Task 12 preregistration, post-change full/clean-room
+Task 12 preregistration, post-change full/clean-room
 verification, and license/redistribution decision remain outstanding.
 Therefore this report does not set `READY FOR CHECKPOINT 19 = YES`.
+
+## Independent Master/Calendar month census
+
+The separate `SourcePinnedMonthCoverageEvidenceV2` derives the expected
+candidate set from pinned Master intervals and approved exchange calendars,
+then recomputes each disposition and matches both the physical partition rows
+and the exact scoped-exclusion ledger. It does not infer the expected universe
+from rows already written. Missing eligible rows, forged scoped exclusions,
+Master overlaps, and tampered evidence fail closed.
+
+Actual offline `2010-01` source-pinned run:
+
+```text
+effective anchors = 34271
+eligible/materialized = 26899
+excluded before label = 6950
+scoped excluded = 422
+coverage hash = b6108848b3cd469f37f1baaa43e4c3b5aa5f253663d47ac9e32e9fc8022b7e3c
+candidate set hash = 76ed7e266c91e0dcef1326555b3c1fae08d47e0530c4a97f7fd381292f655770
+coverage evidence ID = 834534a947d79b10a16404ae35430aafb63b36e0ac467d46b97a57117959ef75
+```
+
+The content-addressed evidence was written and read back exactly under the
+ignored local `data/phase_2b_checkpoint18_real_month/gate_evidence` directory.
+It is not yet a published research manifest or final gate PASS. The real
+census command exited 0; combined focused regression was `11 passed,
+1 skipped in 107.56s`, where the skip is the separately gated real-month
+pytest entrypoint. The real-month census itself was run explicitly and passed.
