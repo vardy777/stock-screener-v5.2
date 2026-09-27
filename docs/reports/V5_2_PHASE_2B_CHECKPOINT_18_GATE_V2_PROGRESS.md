@@ -108,3 +108,18 @@ as required; focused fail-closed tests: `3 passed in 0.17s`. Ordinary
 clean-room acceptance above is not a substitute for this missing private-CAS
 evidence. No runtime fallback to the main checkout or sibling worktree was
 introduced.
+
+Local full pytest baseline (launched before the last three clean-room
+fail-closed cases were added): `1038 passed, 7 skipped in 3534.67s`, exit 0.
+The last clean-room focused cases separately passed `3 passed in 0.17s`.
+This does not constitute one final full-suite run against the exact final
+worktree. Tracked credential-pattern scan found zero matching files; the only
+tracked `.env*` file is `.env.example` with an empty `TUSHARE_TOKEN=` value.
+
+The fresh-checkout runner was narrowed to a single-branch, depth-1 `file://`
+Git transport after a diagnostic full-history local clone proved needlessly
+expensive. `git ls-remote` on that exact file URL resolved the frozen feature
+HEAD. The interrupted diagnostic clone remains only in the machine's Temp
+directory because recursive cleanup was rejected by the command policy; it
+is not a provider source, repository artifact, or pushed content. This is not
+formal private-CAS clean-room evidence.

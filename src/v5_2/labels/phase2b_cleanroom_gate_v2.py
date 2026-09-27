@@ -172,9 +172,9 @@ def derive_cleanroom_evidence_exact(source_root: Path) -> CleanRoomEvidenceV2:
     with TemporaryDirectory(prefix="v52-phase2b-private-cleanroom-") as temporary:
         room = Path(temporary)
         clone = room / "checkout"
-        run("LOCAL_CLONE", ("git", "clone", "--local", "--no-hardlinks",
+        run("LOCAL_CLONE", ("git", "clone", "--no-local", "--depth", "1",
                             "--single-branch", "--branch", branch,
-                            str(source_root), str(clone)), room)
+                            source_root.as_uri(), str(clone)), room)
         cloned_commit = subprocess.run(
             ("git", "-C", str(clone), "rev-parse", "HEAD"),
             capture_output=True, text=True, check=True).stdout.strip()
