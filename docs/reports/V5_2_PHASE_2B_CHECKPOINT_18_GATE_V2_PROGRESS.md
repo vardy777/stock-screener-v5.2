@@ -55,9 +55,18 @@ and replay-envelope regression. The full real-month evaluator has **not yet**
 been rerun with this artifact; 16/18 is therefore not a formal measured claim.
 
 The deterministic replay gate now has a two-fresh-output implementation and
-tamper-resistant evidence envelope; its 2010-01 opt-in test is running at the
-time of this report update. `CLEAN_ROOM_STANDALONE` remains unimplemented in
-the formal evaluator. Checkpoint 18 is still FAIL / OPEN.
+tamper-resistant evidence envelope. Opt-in real-month verification passed:
+`1 passed in 2981.09s`; both fresh runs yielded partition
+`3c194baf309486c16dd8f7f9e1916f4a1a4af49c9b108bcc06ce693eee615ba9`
+and independent row-comparison ledger
+`c3b16aa0f7618e702e5bcab8b977b1919a75f72c5d65795576a1eeb74dd0bca8`.
+Exact replay evidence ID:
+`349b09b145cd7f7877d0989b0c72d8a4f0cd621391fc032663a1d9221eef726b`.
+The formal evaluator additionally requires this evidence to bind the currently
+evaluated partition, candidate census, coverage, scoped ledger and comparison
+ledger. The full 17-gate real-month evaluator rerun remains pending;
+`CLEAN_ROOM_STANDALONE` remains unimplemented in the formal evaluator.
+Checkpoint 18 is still FAIL / OPEN.
 
 ## TDD negatives already exercised
 
@@ -80,6 +89,10 @@ the formal evaluator. Checkpoint 18 is still FAIL / OPEN.
 - Manifest/unsafe focused regression: `5 passed in 0.18s` and `3 passed in 0.21s` respectively.
 - New state-combination and unknown-state regression tests individually passed after RED failures.
 - `scripts/verify_standalone.py`: five checks PASS, zero violations.
+- Latest ordinary clean-room run: `788 passed, 257 skipped in 8.01s`, build,
+  wheel install/smoke and zero-project-dependency acceptance true; archive
+  findings empty. Its skipped private-CAS tests are **not** formal Gate 18
+  evidence.
 - `python -m compileall` on changed evaluator modules: PASS.
 - `git diff --cached --check`: PASS.
 

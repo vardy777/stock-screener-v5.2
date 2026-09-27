@@ -8,6 +8,7 @@ import pytest
 
 from v5_2.labels.phase2b_replay_gate_v2 import (
     SourcePinnedReplayEvidenceV2, derive_replay_evidence_exact, read_replay_evidence_exact,
+    replay_binds_evaluated_sources,
     write_replay_evidence,
 )
 from v5_2.data.identity import content_hash
@@ -33,6 +34,16 @@ def test_replay_envelope_rejects_single_run_and_divergent_ids(tmp_path):
     assert evidence.verify()
     path = write_replay_evidence(tmp_path, evidence)
     assert read_replay_evidence_exact(path, evidence.evidence_id) == evidence
+    binding = dict(partition_id=common, candidate_set_hash=common,
+                   coverage_id=common, scoped_ledger_id=common,
+                   comparison_ledger_id=common)
+    assert replay_binds_evaluated_sources(evidence, **binding)
+    assert not replay_binds_evaluated_sources(
+        evidence, **(binding | {"partition_id": "b" * 64}))
+    assert not replay_binds_evaluated_sources(
+        evidence, **(binding | {"coverage_id": "b" * 64}))
+    assert not replay_binds_evaluated_sources(
+        evidence, **(binding | {"comparison_ledger_id": "b" * 64}))
     assert not replace(evidence, partition_ids=(common, "b" * 64)).verify()
     assert not replace(evidence, row_set_hashes=(common,)).verify()
     with pytest.raises(ValueError):

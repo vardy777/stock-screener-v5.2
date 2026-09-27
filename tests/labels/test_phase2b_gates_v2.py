@@ -318,6 +318,8 @@ def test_real_month_partition_and_lineage_gates_require_source_pins():
     incremental = derive_incremental_idempotency_evidence_exact(
         ROOT, root / "incremental-gate-scratch")
     incremental_path = write_incremental_idempotency_evidence(root, incremental)
+    replay_id = "349b09b145cd7f7877d0989b0c72d8a4f0cd621391fc032663a1d9221eef726b"
+    replay_path = root / "gate_evidence" / f"replay-{replay_id}.json"
     evaluation = evaluate_phase2b_gates_v2_exact(
         source_root=ROOT,
         partition_path=partition_path,
@@ -344,6 +346,7 @@ def test_real_month_partition_and_lineage_gates_require_source_pins():
         identity_path=identity_path, identity_id=identity.evidence_id,
         delisting_path=delisting_path, delisting_id=delisting.evidence_id,
         incremental_path=incremental_path, incremental_id=incremental.evidence_id,
+        replay_path=replay_path, replay_id=replay_id,
     )
     by_gate = {item.gate: item.status for item in evaluation.results}
     assert by_gate["CONTRACT_PINNING"] == "PASS"
@@ -357,4 +360,5 @@ def test_real_month_partition_and_lineage_gates_require_source_pins():
     assert by_gate["IDENTITY_SAFETY"] == "PASS"
     assert by_gate["DELISTING_SAFETY"] == "PASS"
     assert by_gate["INCREMENTAL_IDEMPOTENCY"] == "PASS"
-    assert sum(status == "PASS" for status in by_gate.values()) == 16
+    assert by_gate["DETERMINISTIC_REPLAY"] == "PASS"
+    assert sum(status == "PASS" for status in by_gate.values()) == 17

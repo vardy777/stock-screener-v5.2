@@ -48,6 +48,10 @@ from v5_2.labels.phase2b_incremental_gate_v2 import (
 )
 from v5_2.labels.phase2b_replay_gate_v2 import (
     derive_replay_evidence_exact, read_replay_evidence_exact,
+    replay_binds_evaluated_sources,
+)
+from v5_2.labels.phase2b_cleanroom_gate_v2 import (
+    derive_cleanroom_evidence_exact, read_cleanroom_evidence_exact,
 )
 
 
@@ -146,6 +150,8 @@ def evaluate_phase2b_gates_v2_exact(*, source_root: Path,
                                     incremental_id: str | None = None,
                                     replay_path: Path | None = None,
                                     replay_id: str | None = None,
+                                    cleanroom_path: Path | None = None,
+                                    cleanroom_id: str | None = None,
                                     ) -> Phase2BGateEvaluationV2:
     """Independently rederive pinned semantic evidence before any PASS.
 
@@ -240,6 +246,17 @@ def evaluate_phase2b_gates_v2_exact(*, source_root: Path,
             if recorded_replay != derived_replay:
                 raise ValueError("replay evidence differs from frozen source")
             replay = derived_replay
+        except (OSError, ValueError, KeyError, TypeError):
+            pass
+    cleanroom = None
+    if cleanroom_path is not None and cleanroom_id is not None:
+        try:
+            recorded_cleanroom = read_cleanroom_evidence_exact(
+                cleanroom_path, cleanroom_id)
+            derived_cleanroom = derive_cleanroom_evidence_exact(source_root)
+            if recorded_cleanroom != derived_cleanroom:
+                raise ValueError("clean-room evidence differs from fresh checkout")
+            cleanroom = derived_cleanroom
         except (OSError, ValueError, KeyError, TypeError):
             pass
     maturation = None
@@ -388,11 +405,24 @@ def evaluate_phase2b_gates_v2_exact(*, source_root: Path,
                 gate, "PASS", None,
                 (incremental.evidence_id, incremental.first_manifest_id,
                  incremental.first_partition_id)))
-        elif gate == "DETERMINISTIC_REPLAY" and replay is not None:
+        elif (gate == "DETERMINISTIC_REPLAY" and replay is not None
+              and coverage is not None and comparison is not None
+              and partition_valid
+              and replay_binds_evaluated_sources(
+                  replay, partition_id=partition_id,
+                  candidate_set_hash=coverage.candidate_set_hash,
+                  coverage_id=coverage.evidence_id,
+                  scoped_ledger_id=scoped_id,
+                  comparison_ledger_id=comparison.ledger_id)):
             results.append(Phase2BGateResultV2(
                 gate, "PASS", None,
                 (replay.evidence_id, replay.partition_ids[0],
                  replay.row_comparison_ledger_id)))
+        elif gate == "CLEAN_ROOM_STANDALONE" and cleanroom is not None:
+            results.append(Phase2BGateResultV2(
+                gate, "PASS", None,
+                (cleanroom.evidence_id, cleanroom.corpus_manifest_id,
+                 cleanroom.inventory_hash, cleanroom.reproduced_partition_id)))
         elif gate == "NOT_LABEL_SAFE_PRESERVATION" and unsafe is not None:
             results.append(Phase2BGateResultV2(
                 gate, "PASS", None, (unsafe.evidence_id, semantic.ledger_id)))

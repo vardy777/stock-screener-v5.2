@@ -45,6 +45,19 @@ class SourcePinnedReplayEvidenceV2:
         )
 
 
+def replay_binds_evaluated_sources(evidence: SourcePinnedReplayEvidenceV2,
+                                   *, partition_id: str, candidate_set_hash: str,
+                                   coverage_id: str, scoped_ledger_id: str,
+                                   comparison_ledger_id: str) -> bool:
+    """A valid replay of a different generation cannot approve this one."""
+    return (evidence.verify()
+            and evidence.partition_ids[0] == partition_id
+            and evidence.candidate_set_hashes[0] == candidate_set_hash
+            and evidence.coverage_evidence_ids[0] == coverage_id
+            and evidence.scoped_ledger_ids[0] == scoped_ledger_id
+            and evidence.row_comparison_ledger_id == comparison_ledger_id)
+
+
 def derive_replay_evidence_exact(source_root: Path,
                                  scratch_root: Path) -> SourcePinnedReplayEvidenceV2:
     """Rerun production materialization twice; independently verify both outputs."""
