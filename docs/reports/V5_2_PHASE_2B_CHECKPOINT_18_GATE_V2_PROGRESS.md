@@ -29,12 +29,13 @@ or mismatched evidence remains FAIL. The currently implemented paths are:
 6. Partition and five-domain lineage: exact physical readback, independent membership/generation and source reconstruction.
 7. Manifest integrity: canonical bytes, exact active physical partition set, month/generation/lineage relationship, and predecessor supersession continuity. The formal evaluator currently accepts only the one independently censused month; additional months cannot be silently added.
 
-The latest 2010-01 source-pinned evaluator run found **11/18 PASS** for the
+The earlier 2010-01 source-pinned evaluator run found **11/18 PASS** for the
 physical 26,899-row partition. Its local ignored exact manifest ID is
 `74c68c19e73d33491152cd5ffd429c5fd332f1331f8a97ece86e133f25bc2107`.
-This is not final Checkpoint 18 acceptance. The remaining seven gates stay
-FAIL: corporate action, suspension, delisting, identity, deterministic replay,
-incremental idempotency, and clean-room standalone.
+This was not final Checkpoint 18 acceptance. At that earlier point seven gates
+were FAIL: corporate action, suspension, delisting, identity, deterministic
+replay, incremental idempotency, and clean-room standalone. Later results are
+recorded below; this historical count is not the current gate count.
 
 ## Subsequent scoped Gate V2 implementation (still not final)
 
@@ -64,8 +65,13 @@ Exact replay evidence ID:
 `349b09b145cd7f7877d0989b0c72d8a4f0cd621391fc032663a1d9221eef726b`.
 The formal evaluator additionally requires this evidence to bind the currently
 evaluated partition, candidate census, coverage, scoped ledger and comparison
-ledger. The full 17-gate real-month evaluator rerun remains pending;
-`CLEAN_ROOM_STANDALONE` remains unimplemented in the formal evaluator.
+ledger. The formal real-month evaluator rerun passed:
+`1 passed, 12 deselected in 5254.69s` with
+`V52_REAL_MONTH_GATES=1` and `-k
+real_month_partition_and_lineage_gates_require_source_pins`. It asserts
+**17/18 source-pinned gates PASS** and `CLEAN_ROOM_STANDALONE = FAIL`.
+The clean-room evidence producer and formal rederivation hook exist, but
+missing explicit external private CAS prevents a formal Gate 18 PASS.
 Checkpoint 18 is still FAIL / OPEN.
 
 ## TDD negatives already exercised
