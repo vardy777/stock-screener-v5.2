@@ -100,3 +100,11 @@ The complete mutation suite, full pytest, clean-room, build/wheel,
 public-ref hygiene, candidate census, Task 12
 preregistration and final immutable Checkpoint 18 acceptance are **not yet
 complete**. Do not infer a Gate V2 PASS or open Checkpoint 19 from this report.
+
+Current machine limitation: `V5_2_PRIVATE_CAS_ROOT` is unset and the
+previously documented `%LOCALAPPDATA%/V5_2/private-cas` is not present in this
+environment. The formal clean-room producer therefore fails before clone,
+as required; focused fail-closed tests: `3 passed in 0.17s`. Ordinary
+clean-room acceptance above is not a substitute for this missing private-CAS
+evidence. No runtime fallback to the main checkout or sibling worktree was
+introduced.
