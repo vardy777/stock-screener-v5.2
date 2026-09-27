@@ -4,11 +4,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from v5_2.data.identity import content_hash
 from v5_2.labels.dataset_contracts import LabelPartitionV1, LabelRowV1
 from v5_2.labels.phase2b_contract_pins_v2 import (
     derive_contract_pin_evidence_exact, read_contract_pin_evidence_exact,
+)
+from v5_2.labels.phase2b_ca_safety_v2 import (
+    derive_ca_safety_evidence_exact, read_ca_safety_evidence_exact,
 )
 from v5_2.labels.phase2b_gates import PHASE2B_GATES
 from v5_2.labels.partition_store import read_partition_exact, read_partition_rows_exact
@@ -28,6 +32,22 @@ from v5_2.labels.phase2b_semantic_gate_evidence_v2 import (
 )
 from v5_2.labels.phase2b_unsafe_gate_v2 import (
     derive_unsafe_preservation_evidence, read_unsafe_preservation_evidence_exact,
+)
+from v5_2.labels.phase2b_suspension_safety_v2 import (
+    derive_suspension_evidence_exact, read_suspension_evidence_exact,
+)
+from v5_2.labels.phase2b_identity_safety_v2 import (
+    derive_identity_safety_evidence_exact, read_identity_safety_evidence_exact,
+)
+from v5_2.labels.phase2b_delisting_safety_v2 import (
+    derive_delisting_safety_evidence_exact, read_delisting_safety_evidence_exact,
+)
+from v5_2.labels.phase2b_incremental_gate_v2 import (
+    derive_incremental_idempotency_evidence_exact,
+    read_incremental_idempotency_evidence_exact,
+)
+from v5_2.labels.phase2b_replay_gate_v2 import (
+    derive_replay_evidence_exact, read_replay_evidence_exact,
 )
 
 
@@ -114,6 +134,18 @@ def evaluate_phase2b_gates_v2_exact(*, source_root: Path,
                                     manifest_id: str | None = None,
                                     active_partition_paths: tuple[Path, ...] = (),
                                     previous_manifest_path: Path | None = None,
+                                    ca_path: Path | None = None,
+                                    ca_id: str | None = None,
+                                    suspension_path: Path | None = None,
+                                    suspension_id: str | None = None,
+                                    identity_path: Path | None = None,
+                                    identity_id: str | None = None,
+                                    delisting_path: Path | None = None,
+                                    delisting_id: str | None = None,
+                                    incremental_path: Path | None = None,
+                                    incremental_id: str | None = None,
+                                    replay_path: Path | None = None,
+                                    replay_id: str | None = None,
                                     ) -> Phase2BGateEvaluationV2:
     """Independently rederive pinned semantic evidence before any PASS.
 
@@ -140,6 +172,74 @@ def evaluate_phase2b_gates_v2_exact(*, source_root: Path,
             if recorded_contract != derived_contract:
                 raise ValueError("contract pins differ from frozen authority")
             contract = derived_contract
+        except (OSError, ValueError, KeyError, TypeError):
+            pass
+    ca = None
+    if ca_path is not None and ca_id is not None:
+        try:
+            recorded_ca = read_ca_safety_evidence_exact(ca_path, ca_id)
+            derived_ca = derive_ca_safety_evidence_exact(source_root)
+            if recorded_ca != derived_ca:
+                raise ValueError("CA evidence differs from frozen source")
+            ca = derived_ca
+        except (OSError, ValueError, KeyError, TypeError):
+            pass
+    suspension = None
+    if suspension_path is not None and suspension_id is not None:
+        try:
+            recorded_suspension = read_suspension_evidence_exact(
+                suspension_path, suspension_id)
+            derived_suspension = derive_suspension_evidence_exact(source_root)
+            if recorded_suspension != derived_suspension:
+                raise ValueError("suspension evidence differs from frozen source")
+            suspension = derived_suspension
+        except (OSError, ValueError, KeyError, TypeError):
+            pass
+    identity = None
+    if identity_path is not None and identity_id is not None:
+        try:
+            recorded_identity = read_identity_safety_evidence_exact(
+                identity_path, identity_id)
+            derived_identity = derive_identity_safety_evidence_exact(source_root)
+            if recorded_identity != derived_identity:
+                raise ValueError("identity evidence differs from frozen source")
+            identity = derived_identity
+        except (OSError, ValueError, KeyError, TypeError):
+            pass
+    delisting = None
+    if delisting_path is not None and delisting_id is not None:
+        try:
+            recorded_delisting = read_delisting_safety_evidence_exact(
+                delisting_path, delisting_id)
+            derived_delisting = derive_delisting_safety_evidence_exact(source_root)
+            if recorded_delisting != derived_delisting:
+                raise ValueError("delisting evidence differs from frozen source")
+            delisting = derived_delisting
+        except (OSError, ValueError, KeyError, TypeError):
+            pass
+    incremental = None
+    if incremental_path is not None and incremental_id is not None:
+        try:
+            recorded_incremental = read_incremental_idempotency_evidence_exact(
+                incremental_path, incremental_id)
+            with TemporaryDirectory(prefix="v52-incremental-gate-") as scratch:
+                derived_incremental = derive_incremental_idempotency_evidence_exact(
+                    source_root, Path(scratch))
+            if recorded_incremental != derived_incremental:
+                raise ValueError("incremental evidence differs from real source")
+            incremental = derived_incremental
+        except (OSError, ValueError, KeyError, TypeError):
+            pass
+    replay = None
+    if replay_path is not None and replay_id is not None:
+        try:
+            recorded_replay = read_replay_evidence_exact(replay_path, replay_id)
+            with TemporaryDirectory(prefix="v52-replay-gate-") as scratch:
+                derived_replay = derive_replay_evidence_exact(
+                    source_root, Path(scratch))
+            if recorded_replay != derived_replay:
+                raise ValueError("replay evidence differs from frozen source")
+            replay = derived_replay
         except (OSError, ValueError, KeyError, TypeError):
             pass
     maturation = None
@@ -264,6 +364,35 @@ def evaluate_phase2b_gates_v2_exact(*, source_root: Path,
                 gate, "PASS" if passed else "FAIL",
                 None if passed else "PENDING_MATURATION_CONTRACT_MISMATCH",
                 (maturation.evidence_id,)))
+        elif gate == "CORPORATE_ACTION_SAFETY" and ca is not None:
+            results.append(Phase2BGateResultV2(
+                gate, "PASS", None, (ca.evidence_id, ca.source_approval_id,
+                                      ca.source_authority_id)))
+        elif gate == "SUSPENSION_SAFETY" and suspension is not None:
+            results.append(Phase2BGateResultV2(
+                gate, "PASS", None,
+                (suspension.evidence_id, suspension.source_approval_id,
+                 suspension.source_authority_id)))
+        elif gate == "IDENTITY_SAFETY" and identity is not None:
+            results.append(Phase2BGateResultV2(
+                gate, "PASS", None,
+                (identity.evidence_id, identity.master_approval_id,
+                 identity.graph_approval_id)))
+        elif gate == "DELISTING_SAFETY" and delisting is not None:
+            results.append(Phase2BGateResultV2(
+                gate, "PASS", None,
+                (delisting.evidence_id, delisting.status_fact_id,
+                 delisting.status_manifest_id)))
+        elif gate == "INCREMENTAL_IDEMPOTENCY" and incremental is not None:
+            results.append(Phase2BGateResultV2(
+                gate, "PASS", None,
+                (incremental.evidence_id, incremental.first_manifest_id,
+                 incremental.first_partition_id)))
+        elif gate == "DETERMINISTIC_REPLAY" and replay is not None:
+            results.append(Phase2BGateResultV2(
+                gate, "PASS", None,
+                (replay.evidence_id, replay.partition_ids[0],
+                 replay.row_comparison_ledger_id)))
         elif gate == "NOT_LABEL_SAFE_PRESERVATION" and unsafe is not None:
             results.append(Phase2BGateResultV2(
                 gate, "PASS", None, (unsafe.evidence_id, semantic.ledger_id)))

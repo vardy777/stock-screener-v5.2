@@ -36,6 +36,29 @@ This is not final Checkpoint 18 acceptance. The remaining seven gates stay
 FAIL: corporate action, suspension, delisting, identity, deterministic replay,
 incremental idempotency, and clean-room standalone.
 
+## Subsequent scoped Gate V2 implementation (still not final)
+
+The later 2010-01 opt-in evaluator run reached **15/18 PASS** (`1 passed in
+1564.41s`), with dedicated source-pinned CA, suspension, identity, and
+delisting evidence. Unsupported CA negatives are explicitly marked synthetic
+contract fixtures, not historical market facts. The real delisting boundary
+remains source-quarantined; the frozen Phase 2A delisting fixture only proves
+the calculation boundary. No frozen Phase 1 or Phase 2A semantics changed.
+
+An actual Phase 2B incremental selector defect was also found: pending H0
+results carry no `horizon_end_session`, so the old selector selected no mature
+work. The corrected selector consumes an explicit approved session schedule,
+reuses the frozen pure horizon resolver, and rejects missing/conflicting
+schedules. The real Slot 4 selector/materializer retry evidence passes a
+focused evaluator test; `12 passed, 1 deselected in 4.52s` for incremental
+and replay-envelope regression. The full real-month evaluator has **not yet**
+been rerun with this artifact; 16/18 is therefore not a formal measured claim.
+
+The deterministic replay gate now has a two-fresh-output implementation and
+tamper-resistant evidence envelope; its 2010-01 opt-in test is running at the
+time of this report update. `CLEAN_ROOM_STANDALONE` remains unimplemented in
+the formal evaluator. Checkpoint 18 is still FAIL / OPEN.
+
 ## TDD negatives already exercised
 
 - Rehashed numeric values fail only the relevant return or excursion group.

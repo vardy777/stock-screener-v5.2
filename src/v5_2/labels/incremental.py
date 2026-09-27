@@ -8,6 +8,7 @@ import re
 
 from v5_2.data.identity import content_hash
 from v5_2.labels.contracts import CORE_LABELS, LabelState
+from v5_2.labels.calculation import resolve_label_horizons
 from v5_2.labels.dataset_contracts import (
     LabelDatasetManifestV1, LabelPartitionV1, LabelRowV1,
 )
@@ -142,6 +143,8 @@ def select_incremental_workset(
     *,
     rows: tuple[LabelRowV1, ...],
     new_anchor_keys: tuple[tuple[str, date], ...] = (),
+    approved_exchange_sessions_by_anchor: dict[
+        tuple[str, date], tuple[date, ...]] | None = None,
 ) -> IncrementalMaturationLedgerV1:
     if not predecessor.verify():
         raise ValueError("predecessor manifest failed verification")
@@ -159,12 +162,32 @@ def select_incremental_workset(
     occupied: set[tuple[str, date]] = set()
     for row in rows:
         key = (row.canonical_security_identity, row.anchor_session)
+        schedule = None
+        if approved_exchange_sessions_by_anchor is not None:
+            sessions = approved_exchange_sessions_by_anchor.get(key)
+            if sessions is not None:
+                schedule = resolve_label_horizons(
+                    row.anchor_session, sessions, latest_completed_session)
+        endpoints = {
+            "return_1d": None if schedule is None else schedule.h1,
+            "return_3d": None if schedule is None else schedule.h3,
+            **{name: None if schedule is None else schedule.h5
+               for name in CORE_LABELS[2:]},
+        }
+        for value in row.values:
+            if value.state is LabelState.LABEL_PENDING:
+                expected = endpoints[value.label_name]
+                if value.horizon_end_session is None and expected is None:
+                    raise ValueError("pending label lacks approved horizon schedule")
+                if (value.horizon_end_session is not None and expected is not None
+                        and value.horizon_end_session != expected):
+                    raise ValueError("pending horizon conflicts with approved sessions")
         pending = tuple(
             value.label_name
             for value in row.values
             if value.state is LabelState.LABEL_PENDING
-            and value.horizon_end_session is not None
-            and value.horizon_end_session <= latest_completed_session
+            and (value.horizon_end_session or endpoints[value.label_name])
+                <= latest_completed_session
         )
         if pending:
             items.append(IncrementalWorkItemV1.create(

@@ -13,6 +13,9 @@ from v5_2.labels.phase2b_contract_pins_v2 import (
     PHASE2A_ACCEPTANCE_ID, derive_contract_pin_evidence_exact,
     write_contract_pin_evidence,
 )
+from v5_2.labels.phase2b_ca_safety_v2 import (
+    derive_ca_safety_evidence_exact, write_ca_safety_evidence,
+)
 from v5_2.labels.phase2b_maturation_gate_v2 import (
     derive_maturation_gate_evidence_exact, write_maturation_gate_evidence,
 )
@@ -27,6 +30,19 @@ from v5_2.labels.phase2b_gates_v2 import (
 from v5_2.labels.phase2b_semantic_gate_evidence_v2 import (
     derive_semantic_group_ledger_exact, read_semantic_group_ledger_exact,
     write_semantic_group_ledger,
+)
+from v5_2.labels.phase2b_suspension_safety_v2 import (
+    derive_suspension_evidence_exact, write_suspension_evidence,
+)
+from v5_2.labels.phase2b_identity_safety_v2 import (
+    derive_identity_safety_evidence_exact, write_identity_safety_evidence,
+)
+from v5_2.labels.phase2b_delisting_safety_v2 import (
+    derive_delisting_safety_evidence_exact, write_delisting_safety_evidence,
+)
+from v5_2.labels.phase2b_incremental_gate_v2 import (
+    derive_incremental_idempotency_evidence_exact,
+    write_incremental_idempotency_evidence,
 )
 
 
@@ -183,6 +199,92 @@ def test_manifest_gate_missing_exact_artifact_fails_closed(tmp_path):
                 if item.gate == "MANIFEST_INTEGRITY").status == "FAIL"
 
 
+def test_ca_gate_requires_exact_real_source_and_explicit_boundary_evidence(tmp_path):
+    ca = derive_ca_safety_evidence_exact(ROOT)
+    path = write_ca_safety_evidence(tmp_path, ca)
+    evaluation = evaluate_phase2b_gates_v2_exact(
+        source_root=ROOT, partition_path=tmp_path / "missing.jsonl",
+        partition_id="0" * 64,
+        semantic_ledger_path=tmp_path / "missing.json",
+        semantic_ledger_id="0" * 64,
+        ca_path=path, ca_id=ca.evidence_id,
+    )
+    by_gate = {item.gate: item.status for item in evaluation.results}
+    assert by_gate["CORPORATE_ACTION_SAFETY"] == "PASS"
+    assert by_gate["RETURN_SEMANTICS"] == "FAIL"
+    wrong = evaluate_phase2b_gates_v2_exact(
+        source_root=ROOT, partition_path=tmp_path / "missing.jsonl",
+        partition_id="0" * 64,
+        semantic_ledger_path=tmp_path / "missing.json",
+        semantic_ledger_id="0" * 64,
+        ca_path=path, ca_id="f" * 64,
+    )
+    assert next(item for item in wrong.results
+                if item.gate == "CORPORATE_ACTION_SAFETY").status == "FAIL"
+
+
+def test_suspension_gate_rederives_real_carry_and_mutation(tmp_path):
+    suspension = derive_suspension_evidence_exact(ROOT)
+    path = write_suspension_evidence(tmp_path, suspension)
+    evaluation = evaluate_phase2b_gates_v2_exact(
+        source_root=ROOT, partition_path=tmp_path / "missing.jsonl",
+        partition_id="0" * 64,
+        semantic_ledger_path=tmp_path / "missing.json",
+        semantic_ledger_id="0" * 64,
+        suspension_path=path, suspension_id=suspension.evidence_id,
+    )
+    by_gate = {item.gate: item.status for item in evaluation.results}
+    assert by_gate["SUSPENSION_SAFETY"] == "PASS"
+    assert by_gate["CORPORATE_ACTION_SAFETY"] == "FAIL"
+
+
+def test_identity_gate_rederives_exact_master_transition_and_scoped_exclusion(
+        tmp_path):
+    identity = derive_identity_safety_evidence_exact(ROOT)
+    path = write_identity_safety_evidence(tmp_path, identity)
+    evaluation = evaluate_phase2b_gates_v2_exact(
+        source_root=ROOT, partition_path=tmp_path / "missing.jsonl",
+        partition_id="0" * 64,
+        semantic_ledger_path=tmp_path / "missing.json",
+        semantic_ledger_id="0" * 64,
+        identity_path=path, identity_id=identity.evidence_id,
+    )
+    by_gate = {item.gate: item.status for item in evaluation.results}
+    assert by_gate["IDENTITY_SAFETY"] == "PASS"
+    assert by_gate["SUSPENSION_SAFETY"] == "FAIL"
+
+
+def test_delisting_gate_keeps_effective_and_knowledge_time_distinct(tmp_path):
+    delisting = derive_delisting_safety_evidence_exact(ROOT)
+    path = write_delisting_safety_evidence(tmp_path, delisting)
+    evaluation = evaluate_phase2b_gates_v2_exact(
+        source_root=ROOT, partition_path=tmp_path / "missing.jsonl",
+        partition_id="0" * 64,
+        semantic_ledger_path=tmp_path / "missing.json",
+        semantic_ledger_id="0" * 64,
+        delisting_path=path, delisting_id=delisting.evidence_id,
+    )
+    by_gate = {item.gate: item.status for item in evaluation.results}
+    assert by_gate["DELISTING_SAFETY"] == "PASS"
+    assert by_gate["IDENTITY_SAFETY"] == "FAIL"
+
+
+def test_incremental_gate_reruns_real_selector_and_materializer(tmp_path):
+    evidence = derive_incremental_idempotency_evidence_exact(
+        ROOT, tmp_path / "source-run")
+    path = write_incremental_idempotency_evidence(tmp_path, evidence)
+    evaluation = evaluate_phase2b_gates_v2_exact(
+        source_root=ROOT, partition_path=tmp_path / "missing.jsonl",
+        partition_id="0" * 64,
+        semantic_ledger_path=tmp_path / "missing.json",
+        semantic_ledger_id="0" * 64,
+        incremental_path=path, incremental_id=evidence.evidence_id,
+    )
+    by_gate = {item.gate: item.status for item in evaluation.results}
+    assert by_gate["INCREMENTAL_IDEMPOTENCY"] == "PASS"
+    assert by_gate["DETERMINISTIC_REPLAY"] == "FAIL"
+
+
 @pytest.mark.skipif(os.environ.get("V52_REAL_MONTH_GATES") != "1",
                     reason="explicit source-pinned real-month gate run required")
 def test_real_month_partition_and_lineage_gates_require_source_pins():
@@ -205,6 +307,17 @@ def test_real_month_partition_and_lineage_gates_require_source_pins():
         partition_supersession=(), phase2a_acceptance_id=PHASE2A_ACCEPTANCE_ID,
         lineage_ids=source_approvals)
     manifest_path = write_manifest(root, manifest)
+    ca = derive_ca_safety_evidence_exact(ROOT)
+    ca_path = write_ca_safety_evidence(root, ca)
+    suspension = derive_suspension_evidence_exact(ROOT)
+    suspension_path = write_suspension_evidence(root, suspension)
+    identity = derive_identity_safety_evidence_exact(ROOT)
+    identity_path = write_identity_safety_evidence(root, identity)
+    delisting = derive_delisting_safety_evidence_exact(ROOT)
+    delisting_path = write_delisting_safety_evidence(root, delisting)
+    incremental = derive_incremental_idempotency_evidence_exact(
+        ROOT, root / "incremental-gate-scratch")
+    incremental_path = write_incremental_idempotency_evidence(root, incremental)
     evaluation = evaluate_phase2b_gates_v2_exact(
         source_root=ROOT,
         partition_path=partition_path,
@@ -226,6 +339,11 @@ def test_real_month_partition_and_lineage_gates_require_source_pins():
         manifest_path=manifest_path,
         manifest_id=manifest.manifest_id,
         active_partition_paths=(partition_path,),
+        ca_path=ca_path, ca_id=ca.evidence_id,
+        suspension_path=suspension_path, suspension_id=suspension.evidence_id,
+        identity_path=identity_path, identity_id=identity.evidence_id,
+        delisting_path=delisting_path, delisting_id=delisting.evidence_id,
+        incremental_path=incremental_path, incremental_id=incremental.evidence_id,
     )
     by_gate = {item.gate: item.status for item in evaluation.results}
     assert by_gate["CONTRACT_PINNING"] == "PASS"
@@ -234,4 +352,9 @@ def test_real_month_partition_and_lineage_gates_require_source_pins():
     assert by_gate["PENDING_MATURATION"] == "PASS"
     assert by_gate["NOT_LABEL_SAFE_PRESERVATION"] == "PASS"
     assert by_gate["MANIFEST_INTEGRITY"] == "PASS"
-    assert sum(status == "PASS" for status in by_gate.values()) == 11
+    assert by_gate["CORPORATE_ACTION_SAFETY"] == "PASS"
+    assert by_gate["SUSPENSION_SAFETY"] == "PASS"
+    assert by_gate["IDENTITY_SAFETY"] == "PASS"
+    assert by_gate["DELISTING_SAFETY"] == "PASS"
+    assert by_gate["INCREMENTAL_IDEMPOTENCY"] == "PASS"
+    assert sum(status == "PASS" for status in by_gate.values()) == 16
