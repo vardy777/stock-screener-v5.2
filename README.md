@@ -7,9 +7,19 @@ over future 1-5 trading sessions.
 
 ## Current phase
 
-Standalone Phase 0 provides only the independent package, governance gates and
-foundation primitives. It does not yet contain historical datasets, features,
-labels, ranking or a strategy, and there is no evidence that alpha exists.
+Phase 0 is PASS / FROZEN. Phase 1 is PASS under explicit fail-closed,
+scoped-gap governance; it is not a claim of 100% historical data coverage.
+Daily Bar missing symbol-sessions remain fail-closed. Security Master
+membership is 5,551: 5,549 resolved and two scoped parent-member quarantines.
+Phase 2A Label Engine and Phase 2B historical label infrastructure through
+Checkpoint 18 are PASS / FROZEN. The exact Task 12 preregistered Checkpoint 19
+pilot is authorized but has not yet run. Phase 3 features and ranking have not
+started. Alpha existence and profitability are **not proven**.
+
+The machine-readable current state is in `governance/project-state.json`.
+Checkpoint 18's public hash-only acceptance capsule is
+`c2ff1d3ff8ffffd49279af39b7bb539a251f226e82923b85bf9234470a53f310`.
+The feature branch holds this authority; `main` remains unchanged and stale.
 
 ```powershell
 python -m venv .venv
