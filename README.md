@@ -12,9 +12,11 @@ scoped-gap governance; it is not a claim of 100% historical data coverage.
 Daily Bar missing symbol-sessions remain fail-closed. Security Master
 membership is 5,551: 5,549 resolved and two scoped parent-member quarantines.
 Phase 2A Label Engine and Phase 2B historical label infrastructure through
-Checkpoint 18 are PASS / FROZEN. The exact Task 12 preregistered Checkpoint 19
-pilot is authorized but has not yet run. Phase 3 features and ranking have not
-started. Alpha existence and profitability are **not proven**.
+Checkpoint 18 are PASS / FROZEN. The exact Task 12 preregistered four-candidate
+Checkpoint 19 pilot has run and passed its frozen engineering predicates; its
+independent GitHub review is pending. This small pilot is not an Alpha study.
+Phase 3 features and ranking have not started. Alpha existence and
+profitability are **not proven**.
 
 The machine-readable current state is in `governance/project-state.json`.
 Checkpoint 18's public hash-only acceptance capsule is
