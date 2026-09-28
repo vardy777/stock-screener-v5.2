@@ -9,6 +9,7 @@ import pytest
 from v5_2.labels.phase2b_cleanroom_gate_v2 import (
     CleanRoomCommandV2, CleanRoomEvidenceV2,
     _clone_fresh_checkout,
+    _cleanroom_workspace,
     derive_cleanroom_evidence_exact,
     read_cleanroom_evidence_exact, write_cleanroom_evidence,
 )
@@ -36,6 +37,14 @@ def test_fresh_checkout_preserves_windows_long_paths(tmp_path):
     clone = tmp_path / ("clone" + "c" * 70)
     _clone_fresh_checkout(source, clone, branch)
     assert Path("\\\\?\\" + str(clone / long_file)).read_text(encoding="utf-8") == "approved"
+
+
+def test_cleanroom_workspace_keeps_frozen_authority_paths_readable():
+    private_root = Path.home() / ".v5_2" / "private-cas"
+    with _cleanroom_workspace(private_root) as room:
+        checkout = Path(room) / "c"
+        assert Path(room).parent == private_root.parent
+        assert len(str(checkout / ("x" * 182))) < 260
 
 
 def test_cleanroom_receipt_rejects_missing_phase_failure_and_local_path(tmp_path):

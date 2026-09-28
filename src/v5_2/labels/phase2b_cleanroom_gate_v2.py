@@ -135,6 +135,11 @@ def _clone_fresh_checkout(source_root: Path, clone: Path, branch: str) -> None:
         raise ValueError(f"LOCAL_CLONE failed with exit {result.returncode}")
 
 
+def _cleanroom_workspace(cas_root: Path) -> TemporaryDirectory:
+    """Keep the fresh checkout under the physical private root's short path."""
+    return TemporaryDirectory(prefix="cr-", dir=cas_root.parent)
+
+
 def derive_cleanroom_evidence_exact(source_root: Path) -> CleanRoomEvidenceV2:
     """Build from a fresh local clone and explicit external private CAS.
 
@@ -179,9 +184,9 @@ def derive_cleanroom_evidence_exact(source_root: Path) -> CleanRoomEvidenceV2:
         commands.append(CleanRoomCommandV2(
             name, 0, content_hash({"command": name, "result": value})))
 
-    with TemporaryDirectory(prefix="v52-phase2b-private-cleanroom-") as temporary:
+    with _cleanroom_workspace(cas_root) as temporary:
         room = Path(temporary)
-        clone = room / "checkout"
+        clone = room / "c"
         _clone_fresh_checkout(source_root, clone, branch)
         cloned_commit = subprocess.run(
             ("git", "-C", str(clone), "rev-parse", "HEAD"),
