@@ -1,15 +1,41 @@
 """The formal clean-room receipt must be exact, complete and nonlocal."""
 
 from dataclasses import replace
+from pathlib import Path
+import subprocess
 
 import pytest
 
 from v5_2.labels.phase2b_cleanroom_gate_v2 import (
     CleanRoomCommandV2, CleanRoomEvidenceV2,
+    _clone_fresh_checkout,
     derive_cleanroom_evidence_exact,
     read_cleanroom_evidence_exact, write_cleanroom_evidence,
 )
 from v5_2.labels.phase2b_gates_v2 import evaluate_phase2b_gates_v2_exact
+
+
+def test_fresh_checkout_preserves_windows_long_paths(tmp_path):
+    source = tmp_path / "source"
+    source.mkdir()
+    subprocess.run(("git", "init", str(source)), check=True, capture_output=True)
+    subprocess.run(("git", "-C", str(source), "config", "user.name", "Test"),
+                   check=True, capture_output=True)
+    subprocess.run(("git", "-C", str(source), "config", "user.email", "test@local"),
+                   check=True, capture_output=True)
+    long_file = Path("deep") / ("a" * 55) / ("b" * 55) / "authority.json"
+    target = source / long_file
+    target.parent.mkdir(parents=True)
+    target.write_text("approved", encoding="utf-8")
+    subprocess.run(("git", "-C", str(source), "-c", "core.longpaths=true", "add", "."),
+                   check=True, capture_output=True)
+    subprocess.run(("git", "-C", str(source), "commit", "-m", "fixture"),
+                   check=True, capture_output=True)
+    branch = subprocess.run(("git", "-C", str(source), "branch", "--show-current"),
+                            check=True, capture_output=True, text=True).stdout.strip()
+    clone = tmp_path / ("clone" + "c" * 70)
+    _clone_fresh_checkout(source, clone, branch)
+    assert Path("\\\\?\\" + str(clone / long_file)).read_text(encoding="utf-8") == "approved"
 
 
 def test_cleanroom_receipt_rejects_missing_phase_failure_and_local_path(tmp_path):

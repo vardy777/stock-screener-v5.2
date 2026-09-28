@@ -125,6 +125,16 @@ def read_cleanroom_evidence_exact(path: Path, expected_id: str) -> CleanRoomEvid
     return evidence
 
 
+def _clone_fresh_checkout(source_root: Path, clone: Path, branch: str) -> None:
+    """Use Windows long-path checkout support for the frozen artifact names."""
+    result = subprocess.run(
+        ("git", "-c", "core.longpaths=true", "clone", "--no-local", "--depth", "1",
+         "--single-branch", "--branch", branch, source_root.as_uri(), str(clone)),
+        capture_output=True, text=True, check=False)
+    if result.returncode:
+        raise ValueError(f"LOCAL_CLONE failed with exit {result.returncode}")
+
+
 def derive_cleanroom_evidence_exact(source_root: Path) -> CleanRoomEvidenceV2:
     """Build from a fresh local clone and explicit external private CAS.
 
@@ -172,9 +182,7 @@ def derive_cleanroom_evidence_exact(source_root: Path) -> CleanRoomEvidenceV2:
     with TemporaryDirectory(prefix="v52-phase2b-private-cleanroom-") as temporary:
         room = Path(temporary)
         clone = room / "checkout"
-        run("LOCAL_CLONE", ("git", "clone", "--no-local", "--depth", "1",
-                            "--single-branch", "--branch", branch,
-                            source_root.as_uri(), str(clone)), room)
+        _clone_fresh_checkout(source_root, clone, branch)
         cloned_commit = subprocess.run(
             ("git", "-C", str(clone), "rev-parse", "HEAD"),
             capture_output=True, text=True, check=True).stdout.strip()
