@@ -1,5 +1,55 @@
 # V5.2 Phase 2B Checkpoint 18 — final local acceptance
 
+## Formal persistence addendum — 2026-09-28
+
+The earlier `cc8e07b3...` value below was a **printed content hash**, not a
+persisted immutable Gate V2 evaluation. Its 18/18 engineering result remains
+historical test evidence, but it was not sufficient for formal freeze. The
+authorized persistence correction was committed alone as
+`0c7a89848417b9ca8ca7f6f855748e93c448d493` (tree
+`1b37760efa8e43a7c1eda688c9547f28a370ce8f`), with no Gate V2 predicate,
+contract, evaluator, Phase 1, Phase 2A, or label-semantic changes.
+
+On that clean code commit, the verified 44-object private CAS inventory
+`a559e02eb8726289bb19c80daa37f78c8041e58bf6884d6c92c382da91ab6536`
+at `C:\Users\lisha\.v5_2\private-cas` had zero missing, size-mismatched, or
+hash-mismatched objects. New clean-room receipt
+`360d085723ebdf47e5bede214213195e916a496454fd9ca16562c73031419c08`
+bound that exact commit; its nine commands exited 0. One bounded formal
+`evaluate_phase2b_gates_v2_exact()` rerun independently returned 18/18 PASS,
+all failure codes null, and `verify() = true`. The same process immediately
+wrote the result by immutable create-or-identical semantics to ignored private
+evidence storage:
+
+`data/phase_2b_checkpoint18_real_month/gate_evidence/gate-evaluation-2ee052fd40beccee86f62d4b5fe29eb8710e2548ac8ee5c5e418d0a39646be66.json`
+
+A separate Python process exact-read the file and confirmed 18/18 PASS and
+`all_pass = true`. The new authoritative Gate evaluation ID is
+`2ee052fd40beccee86f62d4b5fe29eb8710e2548ac8ee5c5e418d0a39646be66`;
+the old printed hash was not used as authority. Exact readers also reverified
+candidate census `1a1f2465a2d60e84f61874feccf6538c1c1daec3f69369600255d78379285a8d`
+and Task 12 preregistration
+`5a5d9aa9f72a00e63a5712cf6f6f0bed23823119641a563ff68ea141e808dccc`.
+
+The public-safe capsule is
+`governance/phase2b/checkpoint18-acceptance-c2ff1d3ff8ffffd49279af39b7bb539a251f226e82923b85bf9234470a53f310.json`.
+It embeds the 18 results read from the persisted artifact and reconstructs
+the exact Gate evaluation hash. It records `pilot_executed = false`,
+`checkpoint19_started = false`, `phase3_started = false`, acknowledged prior
+public exposure, and current Git-ref corpus-byte hygiene. No private corpus
+payload or derived month rows were committed. The capsule carrier commit is
+subsequent governance-only work; it does not redefine the evaluated code
+commit. Checkpoint 19 remains unexecuted pending independent GitHub review.
+
+Final capsule-era verification: focused evaluation/capsule tests **21 passed**;
+fresh full `python -m pytest -q` **1068 passed, 8 skipped in 2220.28s**;
+`scripts/verify_standalone.py` five boundaries PASS; exact persisted evaluation,
+census, preregistration, and capsule readbacks PASS in separate Python
+processes; `git diff --check` PASS; new-file credential-pattern scan found
+zero hits. The evaluated-code clean-room receipt above is the fresh
+standalone/build/wheel/private-CAS replay evidence; a second full formal
+rerun for this governance-only carrier is neither claimed nor required.
+
 `CHECKPOINT 18 = PASS / FROZEN` for the evaluated **code commit**
 `116988942b085930027b7c07cfb53018197b050e`. This report is a subsequent
 documentation-only commit; it does not claim that changing the report text
