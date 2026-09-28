@@ -20,6 +20,8 @@ from v5_2.labels.phase2b_maturation_gate_v2 import (
     derive_maturation_gate_evidence_exact, write_maturation_gate_evidence,
 )
 from v5_2.labels.engine import ReferenceLabelEngine
+from v5_2.labels.contracts import LabelState
+from tests.labels.test_phase2b_coverage import row as fixture_row
 from v5_2.labels.historical_five_domain_producer import HistoricalFiveDomainProducerV1
 from v5_2.labels.partition_store import (
     read_partition_exact, write_manifest, write_partition,
@@ -146,6 +148,10 @@ def test_partition_generation_requires_pinned_lineage_and_row_membership(real_ro
     assert not verify_partition_generation_v2(swapped, (real_row,), lineage)
     assert not verify_partition_generation_v2(partition, (real_row,),
                                                tuple(reversed(lineage)))
+    count_preserving_swap = fixture_row(2, LabelState.LABEL_AVAILABLE)
+    assert count_preserving_swap.verify()
+    assert not verify_partition_generation_v2(partition,
+                                               (count_preserving_swap,), lineage)
 
 
 def test_formal_maturation_gate_requires_rederived_frozen_real_bundle(tmp_path):
