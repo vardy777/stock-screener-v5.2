@@ -60,6 +60,43 @@ def test_selected_candidates_cannot_be_reordered_or_substituted():
             contract, five_domain_authority_ids=("9" * 64,) * 5))
 
 
+def test_runner_network_boundary_denies_connection_and_send_attempts(monkeypatch):
+    from v5_2.labels.phase2b_checkpoint19_pilot import _deny_network_for_pilot
+    monkeypatch.setattr(socket.socket, "sendto", lambda *_args, **_kwargs: 1)
+    with _deny_network_for_pilot() as attempts:
+        with pytest.raises(ValueError, match="network request blocked"):
+            socket.socket().connect(("127.0.0.1", 1))
+        with pytest.raises(ValueError, match="network request blocked"):
+            socket.socket().connect_ex(("127.0.0.1", 1))
+        with pytest.raises(ValueError, match="network request blocked"):
+            socket.create_connection(("127.0.0.1", 1))
+        with pytest.raises(ValueError, match="network request blocked"):
+            socket.socket(type=socket.SOCK_DGRAM).sendto(b"x", ("127.0.0.1", 1))
+    assert attempts.count == 4
+
+
+def test_exclusion_requires_independent_reason_and_evidence():
+    from types import SimpleNamespace
+    from v5_2.labels.phase2b_checkpoint19_pilot import _independent_ipo_exclusion
+    from v5_2.labels.anchor_enumerator import AnchorDispositionKind, AnchorDispositionV1
+    from v5_2.refresh.eligibility import IPO_SEASONING_SESSIONS
+    listing = date(2010, 1, 4)
+    anchor = AnchorDispositionV1("000001.SZ", "000001.SZ", listing, "SZSE",
+                                 True, False, AnchorDispositionKind.EXCLUDED_BEFORE_LABEL,
+                                 "IPO_SEASONING")
+    master = SimpleNamespace(resolve=lambda *_: SimpleNamespace(
+        effective_identity="000001.SZ", interval=SimpleNamespace(effective_from=listing),
+        fact_id="a" * 64, approval_id="b" * 64))
+    calendar = SimpleNamespace(sessions=lambda *_: tuple(date(2010, 1, day)
+                                                  for day in (4, 5, 6, 7, 8, 11, 12)))
+    producer = SimpleNamespace(master=master, calendar=calendar)
+    evidence_id = _independent_ipo_exclusion(producer, anchor)
+    assert len(evidence_id) == 64
+    assert IPO_SEASONING_SESSIONS == 5
+    with pytest.raises(ValueError, match="independent exclusion mismatch"):
+        _independent_ipo_exclusion(producer, replace(anchor, reason="STATUS_UNRESOLVED"))
+
+
 @pytest.mark.skipif(os.environ.get("V52_CHECKPOINT19_PILOT") != "1",
                     reason="explicit exact private-CAS pilot run required")
 def test_real_four_candidate_pilot_replays_and_preserves_frozen_selection(tmp_path, monkeypatch):
@@ -80,6 +117,11 @@ def test_real_four_candidate_pilot_replays_and_preserves_frozen_selection(tmp_pa
         "70e76ff1db527bcb5415fed647a6e09d4eb5939c05fdba019da379d89d043cae",
     )
     assert all(case.match for case in first.cases)
+    assert first.cases[1].state == "EXCLUDED_BEFORE_LABEL"
+    assert first.cases[1].independent_result_id is not None
+    assert first.cases[1].comparison_id is not None
+    assert first.cases[1].bundle_id is None
+    assert not replace(first.cases[1], independent_result_id=None).verify()
     assert first.provider_request_count == 0
     assert first.verify()
     census, contract = _read_real_prereg()

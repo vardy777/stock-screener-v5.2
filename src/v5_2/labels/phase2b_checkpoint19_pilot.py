@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, fields
+from contextlib import ExitStack, contextmanager
 from datetime import date
 import json
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from v5_2.data.identity import canonical_json, content_hash
 from v5_2.labels.acceptance import build_full_comparison_entry
@@ -26,6 +28,7 @@ from v5_2.labels.pilot_phase2b import (
     Phase2BCandidateCensusV1, Phase2BPilotContractV1, PilotCandidateV1,
     _source_strata, read_candidate_census_exact, read_pilot_contract_exact,
 )
+from v5_2.refresh.eligibility import IPO_SEASONING_SESSIONS
 
 
 _CENSUS_ID = "1a1f2465a2d60e84f61874feccf6538c1c1daec3f69369600255d78379285a8d"
@@ -99,8 +102,8 @@ class Phase2BCheckpoint19CaseV1:
                      and self.comparison_id is not None
                      if has_bundle else
                      not self.domain_lineage_ids and not self.label_values
-                     and self.row_id is None and self.independent_result_id is None
-                     and self.comparison_id is None
+                     and self.row_id is None and self.independent_result_id is not None
+                     and self.comparison_id is not None
                      and self.state in {"EXCLUDED_BEFORE_LABEL", "SCOPED_EXCLUDED"})
                 and self.case_id == content_hash({"schema_version": type(self).__name__,
                                                   **body}))
@@ -165,6 +168,51 @@ def _source_evidence(produced: object, producer: HistoricalFiveDomainProducerV1
     return (producer.calendar.approval_id, producer.master.approval["approval_id"])
 
 
+def _independent_ipo_exclusion(producer: HistoricalFiveDomainProducerV1,
+                               anchor: AnchorDispositionV1) -> str:
+    """Audit the frozen IPO boundary from exact Master/Calendar facts, not producer eligibility."""
+    resolved = producer.master.resolve(anchor.security_identity, anchor.anchor_session)
+    sessions = producer.calendar.sessions(anchor.exchange)
+    completed = tuple(day for day in sessions
+                      if resolved.interval.effective_from < day <= anchor.anchor_session)
+    if (resolved.effective_identity != anchor.canonical_security_identity
+            or anchor.reason != "IPO_SEASONING"
+            or anchor.disposition.value != "EXCLUDED_BEFORE_LABEL"
+            or len(completed) >= IPO_SEASONING_SESSIONS):
+        raise ValueError("independent exclusion mismatch")
+    return content_hash({"schema_version": "Checkpoint19IndependentIPOAuditV1",
+                         "security_identity": anchor.security_identity,
+                         "canonical_security_identity": anchor.canonical_security_identity,
+                         "anchor_session": anchor.anchor_session,
+                         "master_fact_id": resolved.fact_id,
+                         "master_approval_id": resolved.approval_id,
+                         "list_date": resolved.interval.effective_from,
+                         "post_listing_sessions": completed,
+                         "seasoning_sessions": IPO_SEASONING_SESSIONS,
+                         "disposition": "EXCLUDED_BEFORE_LABEL",
+                         "reason": "IPO_SEASONING"})
+
+
+@contextmanager
+def _deny_network_for_pilot():
+    """Enforce offline execution in the callable runner, not only in its tests."""
+    attempts = SimpleNamespace(count=0)
+    def deny(*_args, **_kwargs):
+        attempts.count += 1
+        raise ValueError("pilot network request blocked")
+    with ExitStack() as guards:
+        for target in ("socket.socket.connect", "socket.socket.connect_ex",
+                       "socket.create_connection", "socket.socket.send",
+                       "socket.socket.sendall", "socket.socket.sendto",
+                       "socket.socket.sendfile"):
+            guards.enter_context(patch(target, deny))
+        try:
+            guards.enter_context(patch("socket.socket.sendmsg", deny))
+        except AttributeError:
+            pass  # Windows socket has no sendmsg; POSIX does.
+        yield attempts
+
+
 def _one_case(index: int, candidate: PilotCandidateV1,
               producer: HistoricalFiveDomainProducerV1,
               engine: ReferenceLabelEngine,
@@ -182,26 +230,25 @@ def _one_case(index: int, candidate: PilotCandidateV1,
                   source_evidence_ids=candidate.source_evidence_ids,
                   five_domain_authority_ids=authorities)
     if isinstance(produced, ScopedAnchorExclusionV1):
-        return Phase2BCheckpoint19CaseV1.create(
-            **common, state="SCOPED_EXCLUDED", reason=produced.reason,
-            label_values=(), domain_lineage_ids=(), bundle_id=None, row_id=None,
-            production_result_id=content_hash({
-                "schema_version": "ScopedAnchorExclusionV1", **{
-                    "security_identity": produced.security_identity,
-                    "anchor_session": produced.anchor_session,
-                    "domain": produced.domain, "reason": produced.reason,
-                    "evidence_ids": produced.evidence_ids}}),
-            independent_result_id=None, comparison_id=None, match=True)
+        raise ValueError("scoped exclusion has no independent pilot audit")
     if isinstance(produced, AnchorDispositionV1):
         excluded = ExcludedAnchorV1.create(produced)
         if (excluded.canonical_security_identity
                 != candidate.canonical_security_identity):
             raise ValueError("excluded identity differs from frozen census")
+        independent_id = _independent_ipo_exclusion(producer, produced)
+        comparison_id = content_hash({
+            "schema_version": "Checkpoint19ExclusionComparisonV1",
+            "candidate_id": candidate.candidate_id,
+            "production_result_id": excluded.content_hash,
+            "independent_result_id": independent_id,
+            "disposition": "MATCH"})
         return Phase2BCheckpoint19CaseV1.create(
             **common, state="EXCLUDED_BEFORE_LABEL", reason=excluded.reason,
             label_values=(), domain_lineage_ids=(), bundle_id=None, row_id=None,
             production_result_id=excluded.content_hash,
-            independent_result_id=None, comparison_id=None, match=True)
+            independent_result_id=independent_id, comparison_id=comparison_id,
+            match=True)
     anchor, lineage, window = produced
     if (anchor.canonical_security_identity != candidate.canonical_security_identity
             or anchor.anchor_session != candidate.anchor_session):
@@ -309,8 +356,9 @@ def read_pilot_result_exact(
     return result
 
 
-def run_checkpoint19_exact(
-        source_root: Path, *, output_root: Path
+def _run_checkpoint19_exact_guarded(
+        source_root: Path, *, output_root: Path,
+        network_attempts: SimpleNamespace,
 ) -> Phase2BCheckpoint19PilotResultV1:
     """Run only the four Task 12 candidates, twice, without market-data I/O."""
     base = source_root / "data/phase_2b_checkpoint18_real_month"
@@ -352,6 +400,17 @@ def run_checkpoint19_exact(
                           for index, candidate in enumerate(selected, 1)))
     if runs[0] != runs[1]:
         raise ValueError("pilot deterministic replay mismatch")
+    network_count = network_attempts.count
+    predicates = {
+        "NO_PROVIDER_REQUESTS": network_count == 0,
+        "EXACT_FIVE_DOMAIN_LINEAGE": all(case.verify() for case in runs[0]),
+        "18_GATES_PASS": evaluation.all_pass and len(evaluation.results) == 18,
+        "DETERMINISTIC_REPLAY": runs[0] == runs[1],
+        "ZERO_MISMATCH": all(case.match and case.independent_result_id
+                             and case.comparison_id for case in runs[0]),
+    }
+    if not all(predicates.values()):
+        raise ValueError("Checkpoint 19 pilot acceptance predicate failed")
     result = Phase2BCheckpoint19PilotResultV1.create(
         checkpoint18_acceptance_id=_ACCEPTANCE_ID,
         gate_evaluation_id=_GATE_ID,
@@ -361,9 +420,16 @@ def run_checkpoint19_exact(
         anchor_sessions=contract.anchor_sessions,
         absent_strata=contract.absent_strata,
         five_domain_authority_ids=contract.five_domain_authority_ids,
-        cases=runs[0], provider_request_count=0,
-        deterministic_replay=True,
-        acceptance_predicates=tuple((item, "PASS")
+        cases=runs[0], provider_request_count=network_count,
+        deterministic_replay=predicates["DETERMINISTIC_REPLAY"],
+        acceptance_predicates=tuple((item, "PASS" if predicates[item] else "FAIL")
                                     for item in contract.acceptance_predicates))
     write_pilot_result_exact(output_root, result)
     return result
+
+
+def run_checkpoint19_exact(source_root: Path, *, output_root: Path
+                           ) -> Phase2BCheckpoint19PilotResultV1:
+    with _deny_network_for_pilot() as attempts:
+        return _run_checkpoint19_exact_guarded(
+            source_root, output_root=output_root, network_attempts=attempts)

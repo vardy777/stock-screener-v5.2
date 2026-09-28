@@ -15,7 +15,7 @@ from v5_2.labels.pilot_phase2b import (
 ROOT = Path(__file__).resolve().parents[2]
 CID = "1a1f2465a2d60e84f61874feccf6538c1c1daec3f69369600255d78379285a8d"
 PID = "5a5d9aa9f72a00e63a5712cf6f6f0bed23823119641a563ff68ea141e808dccc"
-RID = "f9bd6d10ba10532717a63f5f8b584f71e34db4d651fc96f98445c352c618d4dd"
+RID = "805c8ab8cb7e3c9f63f3af20ac34d24da179d54b2ed1319cf1158c3fe14dcb73"
 
 
 @pytest.mark.skipif(os.environ.get("V52_CHECKPOINT19_PILOT") != "1",
